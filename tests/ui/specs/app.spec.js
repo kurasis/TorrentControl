@@ -231,3 +231,32 @@ test.describe("self-test persistence failure", () => {
       .toMatchObject({ ok: false });
   });
 });
+
+test.describe("native self-test recovery checkpoint", () => {
+  test.use({ mockConfig: `window.__mockConfig = {
+    settings: { language: "ru", theme: "dark", mode: "advanced" },
+    nativeCheckpoint: { revision: "1", jobs: [], evidence: { nativeDialogs: true } },
+    rendererRecoveries: 1,
+  };` });
+
+  test("restores the checkpoint without replaying creation or dialogs", async ({ page }) => {
+    await page.goto("/index.html?selfTest=1&nativeFlow=1");
+    await expect.poll(() => page.evaluate(() => window.__mock.requests.find((r) => r.operation === "reportSelfTest")?.payload))
+      .toMatchObject({ ok: true, rendererRecovery: true, recoveredJobs: 0 });
+    expect(await page.evaluate(() => window.__mock.requests.filter((r) => ["startCreate", "selfTestStep", "saveProfile"].includes(r.operation))))
+      .toHaveLength(0);
+  });
+});
+
+test.describe("native self-test recovery failure", () => {
+  test.use({ mockConfig: `window.__mockConfig = {
+    settings: { language: "ru", theme: "dark", mode: "advanced" },
+    nativeCheckpoint: { revision: "1", jobs: [], evidence: {} }, rendererRecoveries: 0,
+  };` });
+
+  test("a page reload alone cannot pass the renderer crash check", async ({ page }) => {
+    await page.goto("/index.html?selfTest=1&nativeFlow=1");
+    await expect.poll(() => page.evaluate(() => window.__mock.requests.find((r) => r.operation === "reportSelfTest")?.payload))
+      .toMatchObject({ ok: false, error: expect.stringContaining("renderer failure callback") });
+  });
+});

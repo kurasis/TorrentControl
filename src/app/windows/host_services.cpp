@@ -36,6 +36,11 @@ void set_folder(IFileDialog* dialog, std::filesystem::path const& folder)
 
 } // namespace
 
+HRESULT WindowsHostServices::show_dialog(IFileDialog* dialog)
+{
+    return dialog_runner_ ? dialog_runner_(dialog) : dialog->Show(owner_);
+}
+
 std::vector<std::filesystem::path> WindowsHostServices::pick_open(OpenKind kind)
 {
     std::vector<std::filesystem::path> result;
@@ -75,7 +80,7 @@ std::vector<std::filesystem::path> WindowsHostServices::pick_open(OpenKind kind)
         break;
     }
     dialog->SetOptions(options);
-    if (FAILED(dialog->Show(owner_))) return result; // includes cancel
+    if (FAILED(show_dialog(dialog.get()))) return result; // includes cancel
 
     wil::com_ptr<IShellItemArray> items;
     if (FAILED(dialog->GetResults(&items))) return result;
@@ -130,7 +135,7 @@ std::optional<std::filesystem::path> WindowsHostServices::pick_save(
     set_folder(dialog.get(), folder);
     if (!suggested_name.empty()) dialog->SetFileName(to_wide(suggested_name).c_str());
 
-    if (FAILED(dialog->Show(owner_))) return std::nullopt;
+    if (FAILED(show_dialog(dialog.get()))) return std::nullopt;
     wil::com_ptr<IShellItem> item;
     if (FAILED(dialog->GetResult(&item))) return std::nullopt;
     auto path = item_path(item.get());

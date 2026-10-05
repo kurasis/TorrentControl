@@ -84,6 +84,12 @@ engine-info round trip. Mock bridge tests still do not replace native checks.
 
 ## Notes on running
 
+The next native Windows gate is documented in
+[Windows / WebView2 validation](windows-native-validation.md), including real
+dialog selection/cancel, creation/verification, project reopening, U03 renderer
+crash recovery, settings restart and U04 missing-runtime detection. Its evidence
+is reported separately from mocked UI coverage.
+
 - POSIX permission tests skip when the process can bypass permissions (root).
   CI runs them as an ordinary user.
 - The hard-link and directory-link tests skip, with a reason, on file systems

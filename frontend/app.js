@@ -448,6 +448,12 @@ async function start() {
     const info = await request("getEngineInfo");
     await refresh();
     if (selfTest) {
+      if (new URLSearchParams(location.search).get("nativeFlow") === "1") {
+        const { runNativeFlow } = await import("./windows-self-test.js");
+        const result = await runNativeFlow(actions, state, info);
+        if (result) await request("reportSelfTest", { ok: true, ...result });
+        return;
+      }
       const { runSelfTest } = await import("./self-test.js");
       await request("reportSelfTest", { ok: true, ...await runSelfTest(actions, state, info) });
     }

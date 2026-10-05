@@ -4,6 +4,8 @@ find_package(wil CONFIG REQUIRED)
 
 add_executable(TorrentControl WIN32
     main.cpp
+    self_test.cpp
+    self_test.hpp
     host_services.cpp
     host_services.hpp
     webview_host.cpp

@@ -113,10 +113,14 @@ void WebViewHost::register_handlers()
     // Only bundled application content may be shown in the view.
     webview_->add_NavigationStarting(
         Callback<ICoreWebView2NavigationStartingEventHandler>(
-            [](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT {
+            [this](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT {
                 wil::unique_cotaskmem_string uri;
                 args->get_Uri(&uri);
                 if (!bridge::is_allowed_source(to_utf8(uri.get()))) args->put_Cancel(TRUE);
+                else {
+                    ++page_generation_;
+                    pending_.clear();
+                }
                 return S_OK;
             })
             .Get(),
@@ -161,7 +165,7 @@ void WebViewHost::register_handlers()
                 wil::unique_cotaskmem_string message;
                 if (FAILED(args->get_Source(&source)) || FAILED(args->TryGetWebMessageAsString(&message)))
                     return S_OK;
-                PendingRequest request{to_utf8(message.get()), to_utf8(source.get()), {}};
+                PendingRequest request{to_utf8(message.get()), to_utf8(source.get()), {}, page_generation_};
                 if (auto args2 = wil::com_ptr<ICoreWebView2WebMessageReceivedEventArgs>(args)
                                      .try_query<ICoreWebView2WebMessageReceivedEventArgs2>()) {
                     wil::com_ptr<ICoreWebView2ObjectCollectionView> objects;
@@ -195,7 +199,10 @@ void WebViewHost::register_handlers()
                     fail(E_FAIL, L"The WebView2 browser process exited.");
                 } else if (kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED
                     || kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE) {
-                    sender->Reload();
+                    ++page_generation_;
+                    pending_.clear();
+                    if (options_.on_renderer_recovery) options_.on_renderer_recovery();
+                    if (FAILED(sender->Reload())) fail(E_FAIL, L"The application page could not be recovered.");
                 }
                 return S_OK;
             })
@@ -213,7 +220,10 @@ void WebViewHost::process_requests()
         PendingRequest request = std::move(pending_.front());
         pending_.pop_front();
         std::string const response = dispatcher_.handle(request.message, request.source, request.attached);
-        post_to_page(response);
+        // A native modal dialog can pump navigation/recovery callbacks while
+        // dispatching. Its response belongs to the old page, whose request IDs
+        // may already have been reused by the new page.
+        if (request.page_generation == page_generation_) post_to_page(response);
     }
     processing_ = false;
 }
@@ -234,6 +244,14 @@ void WebViewHost::resize()
 void WebViewHost::notify_moved()
 {
     if (controller_) controller_->NotifyParentWindowPositionChanged();
+}
+
+HRESULT WebViewHost::crash_renderer_for_self_test()
+{
+    if (!webview_) return E_UNEXPECTED;
+    return webview_->CallDevToolsProtocolMethod(L"Page.crash", L"{}",
+        Callback<ICoreWebView2CallDevToolsProtocolMethodCompletedHandler>(
+            [](HRESULT, LPCWSTR) -> HRESULT { return S_OK; }).Get());
 }
 
 void WebViewHost::close()

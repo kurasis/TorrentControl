@@ -47,6 +47,13 @@ writes the log, and exits with code 0 on success. It uses an isolated data
 folder beside the log and leaves normal user settings untouched. CI runs it
 on every build; see [M2 stabilization](m2-stabilization.md).
 
+CI now additionally runs `tests/windows/run-native-flow.ps1`: real Windows
+file/folder/save dialogs, v1/v2/hybrid creation and verification, project
+round-trip, renderer crash recovery, settings process restart, missing Runtime
+and independent verification of the native outputs. Logs and fixtures are
+uploaded as `windows-native-evidence`. See
+[Windows / WebView2 validation](windows-native-validation.md) for scope and limits.
+
 ## Linux (headless core)
 
 The core, bridge, tools and tests are platform independent and are built and

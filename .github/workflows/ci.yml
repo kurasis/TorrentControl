@@ -88,15 +88,22 @@ jobs:
       - name: Test (unit + headless integration proof)
         run: ctest --preset windows-x64-release
 
-      - name: WebView2 shell self-test
+      - name: Windows dialogs, WebView2 workflow and renderer recovery
         shell: pwsh
-        run: |
-          $exe = "build/windows-x64-release/src/app/windows/TorrentControl.exe"
-          $log = Join-Path $env:RUNNER_TEMP "selftest.log"
-          $p = Start-Process -FilePath $exe -ArgumentList "--self-test", "`"$log`"" -PassThru
-          if (-not $p.WaitForExit(180000)) { $p.Kill(); throw "self-test did not finish" }
-          if (Test-Path $log) { Get-Content $log }
-          if ($p.ExitCode -ne 0) { throw "self-test failed with exit code $($p.ExitCode)" }
+        run: ./tests/windows/run-native-flow.ps1
+
+      - name: Upload native Windows evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-evidence
+          path: |
+            build/windows-native-evidence/*.log
+            build/windows-native-evidence/*.json
+            build/windows-native-evidence/data-*/output/
+            build/windows-native-evidence/data-*/payload/
+            build/windows-native-evidence/data-*/settings.json
+          if-no-files-found: warn
 
       - name: Upload unsigned development build
         uses: actions/upload-artifact@v4
