@@ -164,7 +164,7 @@ int show_runtime_missing(bool quiet)
 {
     if (quiet) return 3;
     int const choice = MessageBoxW(nullptr,
-        L"TorrentControl needs the Microsoft Edge WebView2 Runtime, which is not installed on this computer.\n\n"
+        L"TorrentControl cannot find the Microsoft Edge WebView2 Runtime configured for this application.\n\n"
         L"Open the official download page now?",
         L"TorrentControl", MB_YESNO | MB_ICONINFORMATION);
     if (choice == IDYES) ShellExecuteW(nullptr, L"open", runtime_download_url, nullptr, nullptr, SW_SHOWNORMAL);
