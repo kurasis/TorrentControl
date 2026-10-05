@@ -26,10 +26,10 @@ async function dialog(name, operation, payload = {}) {
   return result;
 }
 
-async function job(state, id) {
+async function job(state, id, expectSuccess = true) {
   await until(() => /^(Succeeded|SucceededWithWarnings|Failed|Cancelled)$/.test(state.jobs.get(id)?.state), `job ${id}`);
   const result = state.jobs.get(id);
-  check(result.state.startsWith("Succeeded"), `${id}: ${JSON.stringify(result.error)}`);
+  if (expectSuccess) check(result.state.startsWith("Succeeded"), `${id}: ${JSON.stringify(result.error)}`);
   return result;
 }
 
@@ -82,6 +82,13 @@ export async function runNativeFlow(actions, state, info) {
     check(opened.problems.length === 0 && opened.format === format, `Invalid ${format} metainfo`);
     for (const key of ["infohashV1", "infohashV2"])
       check((opened[key] ?? "") === (finished.result[key] ?? ""), `Changed ${key}`);
+    if (format === "v1") {
+      const wrong = await dialog("wrong-payload", "verifyPayload", { torrentId: opened.id });
+      const failed = await job(state, wrong.jobId, false);
+      check(failed.state === "Failed" && failed.error?.code === "PAYLOAD_MISMATCH"
+        && failed.verify.files.length === 2 && failed.verify.files.every((file) => file.status === "missing"),
+      "Verification accepted a folder with missing payload files");
+    }
     const verify = await dialog("payload", "verifyPayload", { torrentId: opened.id });
     check((await job(state, verify.jobId)).verify.ok, `${format} payload mismatch`);
     created.push(finished);
@@ -102,7 +109,8 @@ export async function runNativeFlow(actions, state, info) {
   await actions.updateSettings({ language: "ru", theme: "dark", mode: "advanced" });
   snapshot = await request("getSnapshot");
   Object.assign(evidence, { nativeDialogs: true, dialogCancel: true, unicodePaths: true,
-    formats: ["v1", "v2", "hybrid"], verified: 3, projectIdentical: true, magnetSaved: true });
+    formats: ["v1", "v2", "hybrid"], verified: 3, missingPayloadRejected: true,
+    projectIdentical: true, magnetSaved: true });
   // Store the checkpoint natively before crashing; a recovered page must get
   // its state from getSnapshot and must not repeat any earlier operation.
   await request("crashSelfTestRenderer", { revision: snapshot.draft.revision,

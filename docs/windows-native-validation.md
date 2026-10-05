@@ -16,6 +16,8 @@ path; it does not substitute a `HostServices` mock or bypass `GetResult`.
 3. Select a Unicode file, then a Unicode directory containing two real files.
 4. Choose an output, create, reopen and verify each of v1, v2 and hybrid. Jobs
    reach the page via actual native events. Reopened infohashes must match.
+   Selecting the parent folder instead of the payload directory must produce
+   `PAYLOAD_MISMATCH` and two missing-file results; the correct folder must pass.
 5. Save and reopen a project through Windows dialogs. Confirm its resolved
    piece size and recreate a byte-for-byte identical hybrid torrent.
 6. Save a magnet through the Windows dialog and compare the actual file.

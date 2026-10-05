@@ -34,7 +34,7 @@ Invoke-SelfTest "--self-test-settings" (Join-Path $evidence "restart.log")
 # the actual files produced through WebView2, not a tc-proof substitute.
 foreach ($format in @("v1", "v2", "hybrid", "reopened")) {
     $torrent = Join-Path $data "output/$format.torrent"
-    $report = & python tools/reference/verify_torrent.py $torrent --root (Join-Path $data "payload")
+    $report = & python tools/reference/verify_torrent.py $torrent --root (Join-Path $data "payload/набор данных")
     $code = $LASTEXITCODE
     $report | Set-Content -Encoding UTF8 (Join-Path $evidence "$format-reference.json")
     if ($code -ne 0) { throw "Independent verifier rejected $format" }

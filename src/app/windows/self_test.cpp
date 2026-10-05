@@ -29,7 +29,8 @@ nlohmann::json NativeSelfTest::step(nlohmann::json const& payload)
     if (cancel_) selection_.clear();
     else if (name == "file") selection_ = root_ / L"payload" / L"набор данных" / L"данные #1.bin";
     else if (name == "folder") selection_ = root_ / L"payload" / L"набор данных";
-    else if (name == "payload") selection_ = root_ / L"payload";
+    else if (name == "payload") selection_ = root_ / L"payload" / L"набор данных";
+    else if (name == "wrong-payload") selection_ = root_ / L"payload";
     else if (name == "project") selection_ = root_ / L"output" / L"проект.tcproject";
     else if (name == "magnet") selection_ = root_ / L"output" / L"magnet.txt";
     else if (name == "v1" || name == "v2" || name == "hybrid" || name == "reopened")
