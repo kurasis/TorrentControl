@@ -74,6 +74,14 @@ native bridge.
 | U06 | ui `keyboard alone reaches Create and starts a job`, `tabs move with the arrow keys`, `switching modes keeps the values typed in either mode`, `U06 display scaling 100%/150%/200%` |
 | U07 | unit `queued work keeps its settings snapshot and runs in order`, `batch plans per file and per child folder with conflict handling`, `one failed batch item does not affect the others` |
 
+## M2 stabilization regressions
+
+See [M2 stabilization](m2-stabilization.md) for the additional private-batch,
+auto-project round-trip, actual partial-write failure, verification exception,
+profile-dialog and clipboard fallback checks. The native Windows self-test
+now checks real profile persistence and HTML dialogs, beyond its original
+engine-info round trip. Mock bridge tests still do not replace native checks.
+
 ## Notes on running
 
 - POSIX permission tests skip when the process can bypass permissions (root).

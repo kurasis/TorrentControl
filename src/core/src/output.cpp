@@ -40,7 +40,7 @@ std::string same_path_key(fs::path const& p)
 
 #ifdef _WIN32
 
-void write_new_file(fs::path const& path, std::string_view bytes)
+void write_new_file(fs::path const& path, std::string_view bytes, bool& created)
 {
     HANDLE h = CreateFileW(native::extended_path(path).c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
         FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -48,12 +48,14 @@ void write_new_file(fs::path const& path, std::string_view bytes)
         DWORD const err = GetLastError();
         write_failed("Cannot create a temporary file in the destination folder", static_cast<int>(err));
     }
+    created = true;
     std::size_t done = 0;
     DWORD err = 0;
     while (done < bytes.size() && err == 0) {
         DWORD const chunk = static_cast<DWORD>(std::min<std::size_t>(bytes.size() - done, 1u << 30));
         DWORD written = 0;
         if (!WriteFile(h, bytes.data() + done, chunk, &written, nullptr)) err = GetLastError();
+        else if (written == 0) err = ERROR_WRITE_FAULT;
         done += written;
     }
     if (err == 0 && !FlushFileBuffers(h)) err = GetLastError();
@@ -85,13 +87,14 @@ bool is_network_path(fs::path const& p)
 
 #else
 
-void write_new_file(fs::path const& path, std::string_view bytes)
+void write_new_file(fs::path const& path, std::string_view bytes, bool& created)
 {
     int const fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
     if (fd < 0) {
         int const err = errno;
         write_failed(std::string("Cannot create a temporary file in the destination folder: ") + std::strerror(err), err);
     }
+    created = true;
     std::size_t done = 0;
     int err = 0;
     while (done < bytes.size()) {
@@ -99,6 +102,10 @@ void write_new_file(fs::path const& path, std::string_view bytes)
         if (n < 0) {
             if (errno == EINTR) continue;
             err = errno;
+            break;
+        }
+        if (n == 0) {
+            err = EIO;
             break;
         }
         done += static_cast<std::size_t>(n);
@@ -221,8 +228,9 @@ CommitResult commit_output(fs::path const& output, std::string_view bytes, Commi
         Metainfo const expected = Metainfo::parse(std::string(bytes));
 
         fs::path const temp = temp_path_for(target);
-        write_new_file(temp, bytes);
+        bool created = false;
         try {
+            write_new_file(temp, bytes, created);
             if (options.on_stage) options.on_stage(CommitStage::TempWritten);
             std::string const written = read_back(temp);
             Metainfo const reopened = Metainfo::parse(written);
@@ -233,7 +241,8 @@ CommitResult commit_output(fs::path const& output, std::string_view bytes, Commi
             if (options.on_stage) options.on_stage(CommitStage::BeforeCommit);
             move_into_place(temp, target, options.replace_existing);
         } catch (...) {
-            remove_file(temp);
+            // A failed exclusive create must never delete somebody else's file.
+            if (created) remove_file(temp);
             throw;
         }
 

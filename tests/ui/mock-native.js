@@ -68,6 +68,8 @@
 
   const ops = {
     reportSelfTest: () => ({}),
+    checkSelfTestProfile: (p) => ({ persisted: config.selfTestPersistence !== false
+      && profiles.some((profile) => profile.id === p.profileId && profile.name === p.name) }),
     getEngineInfo: () => ({ appVersion: "0.0.0-test", engineVersion: "libtorrent 2.1.2", protocolVersion: 1 }),
     getSnapshot: () => ({ draft: snapshotDraft(), scan, jobs, settings, profiles }),
     selectSources: () => {
@@ -117,6 +119,20 @@
       bump();
       return { draft: snapshotDraft() };
     },
+    saveProfile: (p) => {
+      if (config.saveProfileError) throw new Error(config.saveProfileError);
+      const profile = { id: `custom-${profiles.length}`, name: p.name, builtin: false, format: draft.format };
+      profiles.push(profile);
+      draft.profile = profile.id;
+      bump();
+      return { profileId: profile.id, profiles, draft: snapshotDraft() };
+    },
+    deleteProfile: (p) => {
+      const index = profiles.findIndex((profile) => profile.id === p.profileId);
+      if (index >= 0) profiles.splice(index, 1);
+      return { profiles };
+    },
+    exportMagnet: () => ({ magnet: "magnet:?xt=urn:btih:0123456789012345678901234567890123456789&dn=Example" }),
     updateSettings: (p) => Object.assign(settings, p.patch),
     startCreate: () => {
       const job = { id: "job-1", kind: "create", name: draft.effectiveName, batchId: "", state: "Queued", bytesDone: "0", bytesTotal: "1048576", bytesPerSecond: 0, currentFile: "", filesDone: 0, filesTotal: config.entries, log: [], version: "1", etaSeconds: null };

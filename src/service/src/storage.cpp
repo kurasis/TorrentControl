@@ -63,7 +63,7 @@ json project_json(Draft const& d, int resolved_piece_length)
     draft.erase("revision");
     draft.erase("effectiveName");
     return json{{"format", "torrentcontrol-project"}, {"version", project_format_version}, {"draft", std::move(draft)},
-        {"pieceSizePolicy", {{"version", 1}, {"resolvedPieceLength", resolved_piece_length}}}};
+        {"pieceSizePolicy", {{"version", core::PieceSizeDecision::policy_version}, {"resolvedPieceLength", resolved_piece_length}}}};
 }
 
 void save_project(fs::path const& path, Draft const& d, int resolved_piece_length)
@@ -76,10 +76,28 @@ Draft load_project(fs::path const& path)
     json const j = json::parse(read_small_file(path), nullptr, false);
     if (j.is_discarded() || !j.is_object() || j.value("format", "") != "torrentcontrol-project")
         throw CoreError(ErrorCode::UnsupportedFormat, "Not a TorrentControl project file");
-    if (!j.contains("version") || !j.at("version").is_number_integer() || j.at("version").get<int>() > project_format_version)
+    if (!j.contains("version") || !j.at("version").is_number_integer()
+        || j.at("version") < 1 || j.at("version") > project_format_version)
         throw CoreError(ErrorCode::UnsupportedFormat, "The project was saved by a newer version of TorrentControl");
     if (!j.contains("draft")) throw CoreError(ErrorCode::UnsupportedFormat, "The project has no draft");
-    return draft_from_json(j.at("draft"));
+    Draft draft = draft_from_json(j.at("draft"));
+    if (auto policy = j.find("pieceSizePolicy"); policy != j.end()) {
+        if (!policy->is_object() || !policy->contains("version") || !policy->at("version").is_number_integer()
+            || policy->at("version") != core::PieceSizeDecision::policy_version)
+            throw CoreError(ErrorCode::UnsupportedFormat, "Unsupported project piece-size policy");
+        auto resolved = policy->find("resolvedPieceLength");
+        if (resolved == policy->end() || !resolved->is_number_integer() || *resolved < 0 || *resolved > 128 * 1024 * 1024)
+            throw CoreError(ErrorCode::UnsupportedFormat, "Invalid resolved project piece size");
+        int const length = resolved->get<int>();
+        if (length != 0 && (length < 16 * 1024 || (length & (length - 1)) != 0))
+            throw CoreError(ErrorCode::UnsupportedFormat, "Invalid resolved project piece size");
+        if (draft.piece_length != 0 && length != draft.piece_length)
+            throw CoreError(ErrorCode::UnsupportedFormat, "Project piece size disagrees with its saved policy");
+        // Restore the actual decision as a fixed size. Selecting Automatic in
+        // the existing piece-size control explicitly requests a fresh decision.
+        if (draft.piece_length == 0) draft.piece_length = length;
+    }
+    return draft;
 }
 
 namespace {

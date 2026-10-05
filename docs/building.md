@@ -41,9 +41,11 @@ with its `frontend` folder next to it. It needs the Microsoft Edge WebView2
 Runtime (Evergreen); when the Runtime is missing it shows a native message
 offering the official download page.
 
-`TorrentControl.exe --self-test <log>` loads the UI, performs one bridge round
-trip, writes the log, and exits with code 0 on success. CI runs it on every
-build.
+`TorrentControl.exe --self-test <log>` loads the UI, checks the real bridge,
+HTML profile dialog, saved-profile reload and manual magnet-copy selection,
+writes the log, and exits with code 0 on success. It uses an isolated data
+folder beside the log and leaves normal user settings untouched. CI runs it
+on every build; see [M2 stabilization](m2-stabilization.md).
 
 ## Linux (headless core)
 

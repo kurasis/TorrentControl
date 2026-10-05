@@ -12,6 +12,7 @@
 #include "test_support.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -19,6 +20,7 @@
 #include <condition_variable>
 #include <fstream>
 #include <mutex>
+#include <new>
 #include <thread>
 
 using namespace tc;
@@ -614,4 +616,189 @@ TEST_CASE("manifest pages are bounded and filterable", "[service][U02]")
     CHECK(page["entries"].size() == 1000); // capped
     json const filtered = h.app->manifest_page(0, 50, "FILE14");
     CHECK(filtered["total"] == 111); // file14, file140-149, file1400-1499
+}
+
+TEST_CASE("single and every batch mode enforce the same private policy", "[service][batch][profiles][U07]")
+{
+    auto const* mode = GENERATE("single", "perFile", "perChildFolder");
+    INFO(mode);
+    Harness h;
+    fs::path const root = h.dir.path() / "PrivateBatch";
+    tc::test::write_file(root / "child" / "a.bin", 32 * kib, 1);
+    tc::test::write_file(root / "loose.bin", 32 * kib, 2);
+    fs::path const output = h.dir.path() / "batch";
+    fs::create_directory(output);
+    h.app->add_sources({root});
+    h.app->wait_for_scan();
+    h.app->set_output(h.dir.path() / "single.torrent");
+    h.app->plan_batch(mode, "rename", output);
+
+    std::string code;
+    SECTION("public preset in private torrent")
+    {
+        h.app->update_draft({{"private", true}}, std::nullopt);
+        code = "PRIVATE_PUBLIC_TRACKER";
+    }
+    SECTION("private without an enabled tracker")
+    {
+        h.app->apply_profile("private", std::nullopt);
+        h.app->update_draft({{"trackers", json::array({{{"url", "https://authorized.example/announce"}, {"enabled", false}}})}}, std::nullopt);
+        code = "PRIVATE_WITHOUT_TRACKER";
+    }
+    SECTION("web seeds forbidden by private profile")
+    {
+        h.app->apply_profile("private", std::nullopt);
+        h.app->update_draft({{"trackers", json::array({{{"url", "https://authorized.example/announce"}}})},
+            {"webSeeds", json::array({"https://cdn.example/data/"})}}, std::nullopt);
+        code = "PRIVATE_WEB_SEEDS";
+    }
+    REQUIRE_FALSE(code.empty());
+    CHECK(has_issue(h.app->validate_draft(), code));
+    CHECK_THROWS_AS(h.app->start_create(), ServiceError);
+    CHECK_THROWS_AS(h.app->start_batch(), ServiceError);
+    CHECK(h.app->jobs().snapshot().empty());
+    CHECK(fs::is_empty(output));
+}
+
+TEST_CASE("authorized private batches use their validated settings snapshot", "[service][batch][profiles][U07]")
+{
+    Harness h;
+    h.app->add_sources({h.dataset("Authorized", 2, 16 * kib)});
+    h.app->wait_for_scan();
+    h.app->apply_profile("private", std::nullopt);
+    h.app->update_draft({{"trackers", json::array({{{"url", "https://authorized.example/announce"}}})}}, std::nullopt);
+    // An invalid single-torrent destination is unrelated to batch destinations.
+    h.app->set_output(h.dir.path() / "absent" / "single.torrent");
+    CHECK(has_issue(h.app->validate_draft(), "OUTPUT_FOLDER_MISSING"));
+    h.app->plan_batch("perFile", "rename", h.dir.path());
+    h.gate.close();
+    auto const ids = h.app->start_batch();
+    REQUIRE(ids.size() == 2);
+    h.app->update_draft({{"private", false}, {"trackers", json::array()}}, std::nullopt);
+    h.gate.release();
+    h.app->jobs().wait_idle();
+    for (auto const& id : ids) {
+        auto const j = h.app->jobs().find(id);
+        REQUIRE(j->state == JobState::Succeeded);
+        auto const meta = core::Metainfo::parse(tc::test::read_all(j->result->output));
+        CHECK(meta.info().find("private")->as_int64() == 1);
+        CHECK(meta.root().find("announce")->text() == "https://authorized.example/announce");
+    }
+}
+
+TEST_CASE("automatic project piece decisions survive reopening and resaving", "[service][projects]")
+{
+    Harness h;
+    h.app->add_sources({h.dataset("Auto", 2, 16 * kib)});
+    h.app->wait_for_scan();
+    h.app->update_draft({{"creationDate", "omit"}}, std::nullopt);
+    auto const before = h.app->validate_draft()["summary"]["pieceLength"];
+    fs::path const project = h.dir.path() / "auto.tcproject";
+    h.app->save_project(project);
+    auto saved = json::parse(tc::test::read_all(project));
+    CHECK(saved["draft"]["pieceLength"] == 0);
+    CHECK(saved["pieceSizePolicy"]["resolvedPieceLength"] == before);
+    // A valid saved decision must be used even when today's auto policy differs.
+    saved["pieceSizePolicy"]["resolvedPieceLength"] = 65536;
+    tc::test::write_bytes(project, saved.dump());
+    h.app->new_draft();
+    auto const loaded = h.app->load_project(project);
+    CHECK(loaded["pieceLength"] == 65536);
+    h.app->wait_for_scan();
+    CHECK(h.app->validate_draft()["summary"]["pieceLength"] == 65536);
+    auto id = h.app->start_create();
+    h.app->jobs().wait_idle();
+    auto const result = h.app->jobs().find(id);
+    REQUIRE(result->result);
+    CHECK((result->state == JobState::Succeeded || result->state == JobState::SucceededWithWarnings));
+    CHECK(h.app->jobs().find(id)->result->piece_length == 65536);
+    std::string const first_bytes = tc::test::read_all(result->result->output);
+    h.app->save_project(project);
+    CHECK(load_project(project).piece_length == 65536);
+    h.app->new_draft();
+    h.app->load_project(project);
+    h.app->wait_for_scan();
+    h.app->update_draft({{"replaceExisting", true}}, std::nullopt);
+    auto const repeated = h.app->start_create();
+    h.app->jobs().wait_idle();
+    auto const second = h.app->jobs().find(repeated);
+    REQUIRE(second->result);
+    CHECK(tc::test::read_all(second->result->output) == first_bytes);
+    // Choosing Auto is the explicit way to discard the frozen decision.
+    h.app->update_draft({{"pieceLength", 0}}, std::nullopt);
+    CHECK(h.app->validate_draft()["summary"]["pieceLength"] == before);
+}
+
+TEST_CASE("project piece policies are validated before restoring", "[service][projects]")
+{
+    tc::test::TempDir dir;
+    auto project = project_json(Draft{}, 65536);
+    fs::path const path = dir.path() / "policy.tcproject";
+    SECTION("unknown policy version") { project["pieceSizePolicy"]["version"] = 99; }
+    SECTION("missing policy version") { project["pieceSizePolicy"].erase("version"); }
+    SECTION("invalid policy object") { project["pieceSizePolicy"] = false; }
+    SECTION("missing resolved size") { project["pieceSizePolicy"].erase("resolvedPieceLength"); }
+    SECTION("negative size") { project["pieceSizePolicy"]["resolvedPieceLength"] = -1; }
+    SECTION("oversized value") { project["pieceSizePolicy"]["resolvedPieceLength"] = std::uint64_t(-1); }
+    SECTION("non integer") { project["pieceSizePolicy"]["resolvedPieceLength"] = "65536"; }
+    SECTION("not a power of two") { project["pieceSizePolicy"]["resolvedPieceLength"] = 65537; }
+    SECTION("too small") { project["pieceSizePolicy"]["resolvedPieceLength"] = 8192; }
+    SECTION("contradictory manual choice") { project["draft"]["pieceLength"] = 16384; }
+    tc::test::write_bytes(path, project.dump());
+    CHECK_THROWS_AS(load_project(path), core::CoreError);
+}
+
+TEST_CASE("unresolved and legacy projects can still select automatic pieces", "[service][projects]")
+{
+    tc::test::TempDir dir;
+    auto project = project_json(Draft{}, 0);
+    SECTION("unresolved decision") {}
+    SECTION("legacy without policy metadata") { project.erase("pieceSizePolicy"); }
+    fs::path const path = dir.path() / "unresolved.tcproject";
+    tc::test::write_bytes(path, project.dump());
+    CHECK(load_project(path).piece_length == 0);
+}
+
+TEST_CASE("unexpected verification exceptions fail only their job and release the queue", "[service][verify][jobs]")
+{
+    class BrokenSource final : public core::PayloadSource {
+    public:
+        std::unique_ptr<core::PayloadReader> open(core::ManifestEntry const&) override
+        {
+            throw std::runtime_error("payload adapter failed");
+        }
+    };
+    tc::test::TempDir dir;
+    fs::path const file = dir.path() / "a.bin";
+    tc::test::write_file(file, 16 * kib, 1);
+    std::string const bytes = tc::test::make_torrent(file, core::TorrentFormat::V1, 16384);
+    auto const mapping = core::map_to_root(core::Metainfo::parse(bytes), file);
+    int failure = 0;
+    SECTION("factory exception under scheduler lock") { failure = 1; }
+    SECTION("adapter exception outside scheduler lock") { failure = 2; }
+    SECTION("non standard exception") { failure = 3; }
+    SECTION("allocation exception") { failure = 4; }
+    std::atomic<int> calls{0};
+    JobScheduler::Options options;
+    options.max_concurrent = 1;
+    options.payload_factory = [&]() -> std::unique_ptr<core::PayloadSource> {
+        if (calls.fetch_add(1) == 0) {
+            if (failure == 1) throw std::runtime_error("factory failed");
+            if (failure == 2) return std::make_unique<BrokenSource>();
+            if (failure == 3) throw 42;
+            throw std::bad_alloc();
+        }
+        return core::make_file_payload_source();
+    };
+    JobScheduler jobs(options, {});
+    auto const bad = jobs.enqueue_verify(VerifyJobSpec{"bad", bytes, mapping});
+    auto const good = jobs.enqueue_verify(VerifyJobSpec{"good", bytes, mapping});
+    jobs.wait_idle();
+    auto const failed = jobs.find(bad);
+    REQUIRE(failed->state == JobState::Failed);
+    REQUIRE(failed->error);
+    CHECK(failed->error->code == "INTERNAL");
+    CHECK(failed->error->phase == "Verifying");
+    CHECK(jobs.find(good)->state == JobState::Succeeded);
+    CHECK_FALSE(jobs.has_active());
 }

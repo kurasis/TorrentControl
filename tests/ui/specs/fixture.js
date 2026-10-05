@@ -19,8 +19,8 @@ exports.test = base.test.extend({
       if (!file.startsWith(FRONTEND) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
       return route.fulfill({ status: 200, contentType: TYPES[path.extname(file)] ?? "application/octet-stream", body: fs.readFileSync(file) });
     });
-    if (mockConfig) await page.addInitScript({ content: mockConfig });
-    await page.addInitScript({ path: path.join(__dirname, "../mock-native.js") });
+    // Playwright does not guarantee the order of separate init scripts.
+    await page.addInitScript({ content: `${mockConfig}\n${fs.readFileSync(path.join(__dirname, "../mock-native.js"), "utf8")}` });
     await use(page);
     base.expect(errors, "uncaught page errors").toEqual([]);
   },

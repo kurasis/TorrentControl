@@ -2,8 +2,8 @@
 //
 // Usage:
 //   TorrentControl.exe                      normal start
-//   TorrentControl.exe --self-test LOGFILE  load the UI, round-trip one bridge
-//                                           call, write LOGFILE and exit
+//   TorrentControl.exe --self-test LOGFILE  check the bridge, HTML dialogs and
+//                                           profile persistence; log and exit
 //                                           (0 = success); used by CI
 
 #include "host_services.hpp"
@@ -18,6 +18,7 @@
 #include <shlobj.h>
 
 #include <atomic>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -237,7 +238,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     write_self_test_log(app, "runtime " + tc::app::to_utf8(*runtime));
 
     tc::bridge::register_core_operations(app.dispatcher, TC_APP_VERSION);
-    std::wstring const data_dir = app_data_dir();
+    // Self-tests must not alter the real user's profiles or WebView2 data.
+    std::wstring const data_dir = self_test
+        ? (std::filesystem::path(*app.self_test_log).parent_path()
+            / (L"TorrentControl-self-test-" + std::to_wstring(GetCurrentProcessId()))).wstring()
+        : app_data_dir();
 
     WNDCLASSEXW wc{sizeof(wc)};
     wc.lpfnWndProc = window_proc;
@@ -273,6 +278,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     if (self_test) {
         HWND const window = hwnd;
         AppState* const state = &app;
+        app.dispatcher.register_operation("checkSelfTestProfile", [path = service_options.settings_path](nlohmann::json const& payload) {
+            auto const settings = tc::service::load_settings(path);
+            bool const persisted = std::any_of(settings.custom_profiles.begin(), settings.custom_profiles.end(),
+                [&](auto const& profile) { return profile.id == payload.value("profileId", "")
+                    && profile.name == payload.value("name", ""); });
+            return nlohmann::json{{"persisted", persisted}};
+        });
         app.dispatcher.register_operation("reportSelfTest", [window, state](nlohmann::json const& payload) {
             bool const ok = payload.value("ok", false);
             write_self_test_log(*state, std::string(ok ? "PASS " : "FAIL ") + payload.dump());
