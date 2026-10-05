@@ -59,9 +59,17 @@ The existing basic `TorrentControl.exe --self-test LOGFILE` remains available.
 
 ## Evidence and limits
 
-Results for the current implementation will be recorded after Windows CI
-completes. Linux unit/integration tests and mocked Chromium tests provide
-additional regression coverage; they do not execute the Windows host.
+Local Linux verification: **115/115 CTest entries** and **19/19 Chromium UI
+tests** passed, including recovery checkpoint success and failure regressions.
+Linux unit/integration tests and mocked Chromium tests provide additional
+coverage; they do not execute the Windows host.
+
+The native workflow, fresh-process settings test, four independent output
+verifications and missing-runtime check run in the Windows job of
+[PR #2](https://github.com/kurasis/TorrentControl/pull/2/checks).
+The check details link the CI log and `windows-native-evidence` artifact. CI
+reports the actual Runtime version and final successful scenario flags; those
+checks must pass before this change is merged.
 
 The automated Windows runner covers actual WebView2 and common item dialogs.
 It does not establish manual accessibility, keyboard-only operation of Windows
