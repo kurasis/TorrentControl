@@ -138,10 +138,22 @@ std::wstring app_data_dir()
 }
 
 // The Runtime is detected before any web UI is constructed (section 16).
-std::optional<std::wstring> installed_runtime_version()
+std::wstring configured_runtime_folder()
+{
+    constexpr wchar_t variable[] = L"WEBVIEW2_BROWSER_EXECUTABLE_FOLDER";
+    DWORD const size = GetEnvironmentVariableW(variable, nullptr, 0);
+    if (size == 0) return {};
+    std::wstring folder(size, L'\0');
+    DWORD const length = GetEnvironmentVariableW(variable, folder.data(), size);
+    if (length == 0 || length >= size) return {};
+    folder.resize(length);
+    return folder;
+}
+
+std::optional<std::wstring> installed_runtime_version(std::wstring const& folder)
 {
     LPWSTR version = nullptr;
-    HRESULT const hr = GetAvailableCoreWebView2BrowserVersionString(nullptr, &version);
+    HRESULT const hr = GetAvailableCoreWebView2BrowserVersionString(folder.empty() ? nullptr : folder.c_str(), &version);
     std::optional<std::wstring> result;
     if (SUCCEEDED(hr) && version != nullptr) result = version;
     CoTaskMemFree(version);
@@ -257,7 +269,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     // WebView2 requires a single-threaded apartment on the UI thread.
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) return 1;
 
-    std::optional<std::wstring> const runtime = installed_runtime_version();
+    std::wstring const runtime_folder = configured_runtime_folder();
+    std::optional<std::wstring> const runtime = installed_runtime_version(runtime_folder);
     if (!runtime) {
         write_self_test_log(app, "FAIL WebView2 Runtime not found");
         int const code = show_runtime_missing(self_test);
@@ -356,6 +369,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
 
     tc::app::WebViewHost::Options options;
     options.asset_dir = executable_dir() + L"\\frontend";
+    options.browser_executable_folder = runtime_folder;
     options.user_data_dir = data_dir.empty() ? std::wstring() : data_dir + L"\\WebView2";
     options.start_query = native_flow ? L"?selfTest=1&nativeFlow=1" : self_test ? L"?selfTest=1" : L"";
     options.on_renderer_recovery = [&app] {

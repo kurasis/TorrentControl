@@ -47,6 +47,13 @@ request, discards pending requests when the page changes and sends a response
 only to the generation that requested it. A failed recovery reload is also
 reported as a fatal host error.
 
+The native test also exposed a Runtime selection mismatch: asking the loader
+for the version with a null folder reported the installed Evergreen Runtime
+even when a missing fixed Runtime folder was configured in the environment.
+The host now reads `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` explicitly and passes
+the same folder to both version detection and environment creation. An
+unavailable configured Runtime is detected before creating any web UI.
+
 ## Running
 
 After building the Windows release preset, from the repository root:

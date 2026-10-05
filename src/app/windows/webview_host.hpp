@@ -31,6 +31,7 @@ class WebViewHost {
 public:
     struct Options {
         std::wstring asset_dir;      // bundled frontend directory
+        std::wstring browser_executable_folder; // empty = installed Evergreen
         std::wstring user_data_dir;  // WebView2 profile directory
         std::wstring start_query;    // e.g. L"?selfTest=1"
         // Called once for an unrecoverable error; the host is unusable afterwards.

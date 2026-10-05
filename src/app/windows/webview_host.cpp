@@ -37,7 +37,9 @@ WebViewHost::WebViewHost(HWND window, Options options, bridge::Dispatcher const&
 
 HRESULT WebViewHost::start()
 {
-    return CreateCoreWebView2EnvironmentWithOptions(nullptr, options_.user_data_dir.c_str(), nullptr,
+    return CreateCoreWebView2EnvironmentWithOptions(
+        options_.browser_executable_folder.empty() ? nullptr : options_.browser_executable_folder.c_str(),
+        options_.user_data_dir.c_str(), nullptr,
         Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
             [this](HRESULT result, ICoreWebView2Environment* env) { return on_environment_created(result, env); })
             .Get());
