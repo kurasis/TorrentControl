@@ -208,6 +208,8 @@ json AppService::new_draft()
     output_auto_ = true;
     batch_.reset();
     bump_locked(true);
+    selected_torrent_ = nullptr;
+    edits_.clear();
     return draft_json_locked();
 }
 
@@ -678,9 +680,15 @@ json AppService::open_torrent(fs::path const& path)
         torrents_[id] = OpenedTorrent{fs::absolute(path).lexically_normal(), meta};
     }
 
+    auto decoded = [](std::string const& bytes) -> json {
+        json value(bytes);
+        try { (void)value.dump(); }
+        catch (json::type_error const&) { return nullptr; }
+        return value;
+    };
     auto text = [&](core::bencode::Value const& dict, char const* key) -> json {
         auto const* v = dict.find(key);
-        return v != nullptr && v->type() == core::bencode::Type::String ? json(v->text()) : json(nullptr);
+        return v != nullptr && v->type() == core::bencode::Type::String ? decoded(v->text()) : json(nullptr);
     };
     json trackers = json::array();
     if (auto const* al = meta->root().find("announce-list"); al != nullptr && al->type() == core::bencode::Type::List) {
@@ -688,22 +696,22 @@ json AppService::open_torrent(fs::path const& path)
         for (auto const& t : al->items()) {
             if (t.type() == core::bencode::Type::List)
                 for (auto const& u : t.items())
-                    if (u.type() == core::bencode::Type::String) trackers.push_back({{"url", u.text()}, {"tier", tier}});
+                    if (u.type() == core::bencode::Type::String && !decoded(u.text()).is_null()) trackers.push_back({{"url", u.text()}, {"tier", tier}});
             ++tier;
         }
     } else if (auto const* a = meta->root().find("announce"); a != nullptr && a->type() == core::bencode::Type::String) {
-        trackers.push_back({{"url", a->text()}, {"tier", 0}});
+        if (!decoded(a->text()).is_null()) trackers.push_back({{"url", a->text()}, {"tier", 0}});
     }
     json web_seeds = json::array();
     if (auto const* ul = meta->root().find("url-list"); ul != nullptr) {
-        if (ul->type() == core::bencode::Type::String) web_seeds.push_back(ul->text());
+        if (ul->type() == core::bencode::Type::String) { if (!decoded(ul->text()).is_null()) web_seeds.push_back(ul->text()); }
         else if (ul->type() == core::bencode::Type::List)
             for (auto const& u : ul->items())
-                if (u.type() == core::bencode::Type::String) web_seeds.push_back(u.text());
+                if (u.type() == core::bencode::Type::String && !decoded(u.text()).is_null()) web_seeds.push_back(u.text());
     }
     auto const* priv = meta->info().find("private");
     auto const* piece = meta->info().find("piece length");
-    json j{{"id", id}, {"path", core::to_utf8(path)}, {"name", meta->name()}, {"format", std::string(core::to_string(meta->format()))},
+    json j{{"id", id}, {"path", core::to_utf8(path)}, {"name", decoded(meta->name())}, {"format", std::string(core::to_string(meta->format()))},
         {"private", priv != nullptr && priv->as_int64() == 1}, {"pieceLength", piece ? piece->text() : ""},
         {"realFiles", real}, {"paddingFiles", pads}, {"payloadBytes", std::to_string(total)},
         {"metainfoBytes", std::to_string(meta->bytes().size())}, {"problems", problems},
@@ -712,6 +720,10 @@ json AppService::open_torrent(fs::path const& path)
         {"trackers", std::move(trackers)}, {"webSeeds", std::move(web_seeds)}, {"magnet", core::make_magnet(*meta)}};
     if (meta->info_hashes().v1) j["infohashV1"] = core::to_hex(*meta->info_hashes().v1);
     if (meta->info_hashes().v2) j["infohashV2"] = core::to_hex(*meta->info_hashes().v2);
+    {
+        std::lock_guard lock(mutex_);
+        selected_torrent_ = j;
+    }
     return j;
 }
 
@@ -895,6 +907,14 @@ json AppService::snapshot() const
         {"profiles", profiles_json()}};
     std::lock_guard lock(mutex_);
     if (batch_) j["batch"] = to_json(*batch_);
+    j["torrent"] = selected_torrent_;
+    j["editorPreview"] = nullptr;
+    if (!selected_torrent_.is_null()) {
+        for (auto const& [token, edit] : edits_) {
+            (void)token;
+            if (edit.torrent_id == selected_torrent_["id"].get<std::string>()) j["editorPreview"] = edit.summary;
+        }
+    }
     return j;
 }
 

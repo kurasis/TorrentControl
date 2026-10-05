@@ -226,6 +226,12 @@ CommitResult commit_output(fs::path const& output, std::string_view bytes, Commi
 
         // Validate the bytes before touching the destination folder.
         Metainfo const expected = Metainfo::parse(std::string(bytes));
+        bool const preserved_v1 = options.preserved_info && expected.format() == MetainfoFormat::V1
+            && options.preserved_info->format() == MetainfoFormat::V1
+            && expected.raw_info() == options.preserved_info->raw_info()
+            && validate_metainfo(*options.preserved_info, false).empty();
+        auto const problems = validate_metainfo(expected, !preserved_v1);
+        if (!problems.empty()) throw CoreError(ErrorCode::InvalidMetainfo, problems.front());
 
         fs::path const temp = temp_path_for(target);
         bool created = false;

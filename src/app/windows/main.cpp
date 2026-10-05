@@ -349,6 +349,25 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
                 auto const magnet = tc::service::read_small_file(folder / L"magnet.txt");
                 return nlohmann::json{{"identical", first == second}, {"magnet", magnet}};
             });
+            app.dispatcher.register_operation("checkSelfTestEdits", [state](nlohmann::json const&) {
+                auto const folder = state->native_test->root() / L"output";
+                auto const original = tc::core::Metainfo::parse(tc::service::read_small_file(folder / L"hybrid.torrent"));
+                auto const outer = tc::core::Metainfo::parse(tc::service::read_small_file(folder / L"outer-edited.torrent"));
+                auto const info = tc::core::Metainfo::parse(tc::service::read_small_file(folder / L"info-edited.torrent"));
+                auto same = [](tc::core::bencode::Value const* a, tc::core::bencode::Value const* b) {
+                    if (!a || !b) return a == b;
+                    return tc::core::bencode::encode(*a) == tc::core::bencode::encode(*b);
+                };
+                bool unchanged = true;
+                for (auto const* key : {"pieces", "file tree"}) {
+                    unchanged = unchanged && same(original.info().find(key), info.info().find(key));
+                }
+                unchanged = unchanged && same(original.root().find("piece layers"), info.root().find("piece layers"));
+                return nlohmann::json{{"rawInfoPreserved", original.raw_info() == outer.raw_info()},
+                    {"payloadHashesPreserved", unchanged},
+                    {"commentPreserved", info.root().find("comment")->text() == outer.root().find("comment")->text()},
+                    {"sourceEdited", info.info().find("source")->text() == "native-m3"}};
+            });
         }
         app.dispatcher.register_operation("checkSelfTestProfile", [path = service_options.settings_path](nlohmann::json const& payload) {
             auto const settings = tc::service::load_settings(path);

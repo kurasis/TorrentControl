@@ -91,7 +91,7 @@ std::vector<MetainfoFile> metainfo_files(Metainfo const& m);
 // counts, identifiers, safe paths, hybrid v1/v2 consistency, and v2 piece
 // layers against their file roots. Returns human-readable problems; empty
 // means valid.
-std::vector<std::string> validate_metainfo(Metainfo const& m);
+std::vector<std::string> validate_metainfo(Metainfo const& m, bool require_canonical_info = true);
 
 Sha1Digest sha1(std::string_view data);
 Sha256Digest sha256(std::string_view data);

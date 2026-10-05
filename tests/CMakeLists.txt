@@ -9,6 +9,7 @@ add_executable(tc_unit_tests
     unit/bridge_tests.cpp
     unit/consistency_tests.cpp
     unit/engine_tests.cpp
+    unit/field_registry_tests.cpp
     unit/manifest_policy_tests.cpp
     unit/manifest_tests.cpp
     unit/metainfo_tests.cpp

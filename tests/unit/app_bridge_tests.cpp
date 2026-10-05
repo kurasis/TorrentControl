@@ -226,3 +226,117 @@ TEST_CASE("an opened torrent is described and verified through the bridge", "[br
     b.app->jobs().wait_idle();
     CHECK(b.app->jobs().find(job)->state == service::JobState::Succeeded);
 }
+
+TEST_CASE("metadata editing through the bridge previews and commits only a native selected destination", "[bridge][editor][E01]")
+{
+    Bridge b;
+    auto payload = b.dir.path() / "data.bin";
+    auto input = b.dir.path() / "original.torrent";
+    auto output = b.dir.path() / "edited.torrent";
+    test::write_file(payload, 100003, 7);
+    auto bytes = test::make_torrent(payload, core::TorrentFormat::Hybrid, 16384);
+    service::write_file_atomic(input, bytes);
+    b.host.opens.push_back({input});
+    auto torrent = b.ok("openTorrent")["torrent"];
+    auto id = torrent["id"];
+    CHECK(b.ok("getSnapshot")["torrent"] == torrent);
+    auto fields = b.ok("getTorrentFields", {{"torrentId", id}, {"scope", "info"}, {"limit", 2}});
+    CHECK(fields["rows"].size() == 2);
+    CHECK(fields["total"].get<int>() > 2);
+    auto typed_key = [](std::string const& key) { return json{{"t", "str"}, {"utf8", key}}; };
+    auto patch = json::array({{{"key", typed_key("comment")}, {"value", {{"t", "str"}, {"utf8", "Edited through the bridge"}}}}});
+    auto p = b.ok("previewTorrentEdit", {{"torrentId", id}, {"outer", patch}, {"info", json::array()}});
+    CHECK(p["rawInfoPreserved"] == true);
+    CHECK(p["newHashes"] == p["oldHashes"]);
+    CHECK(b.ok("getSnapshot")["editorPreview"] == p);
+    CHECK(b.ok("chooseEditorOutput", {{"token", p["token"]}, {"path", core::to_utf8(output)}})["cancelled"] == true);
+    CHECK_FALSE(fs::exists(output));
+    b.host.saves.push_back(output);
+    auto chosen = b.ok("chooseEditorOutput", {{"token", p["token"]}});
+    CHECK(b.host.save_names.back() == "original.edited.torrent");
+    CHECK(chosen["requiresReplace"] == false);
+    auto saved = b.ok("saveTorrentEdit", {{"token", p["token"]}});
+    CHECK(saved["torrent"]["infohashV1"] == torrent["infohashV1"]);
+    CHECK(saved["torrent"]["infohashV2"] == torrent["infohashV2"]);
+    CHECK(service::read_small_file(input) == bytes);
+    auto edited = core::Metainfo::parse(service::read_small_file(output));
+    CHECK(edited.raw_info() == core::Metainfo::parse(bytes).raw_info());
+    CHECK(edited.root().find("comment")->text() == "Edited through the bridge");
+    CHECK(b.call("saveTorrentEdit", {{"token", p["token"]}})["error"]["code"] == "STALE_PREVIEW");
+    CHECK(b.ok("getSnapshot")["editorPreview"].is_null());
+    b.ok("newDraft");
+    CHECK(b.ok("getSnapshot")["torrent"].is_null());
+}
+
+TEST_CASE("metadata save refuses stale tokens external changes and implicit overwrites", "[bridge][editor]")
+{
+    Bridge b;
+    auto payload = b.dir.path() / "data.bin";
+    auto input = b.dir.path() / "original.torrent";
+    test::write_file(payload, 100, 7);
+    auto bytes = test::make_torrent(payload, core::TorrentFormat::V1, 16384);
+    service::write_file_atomic(input, bytes);
+    b.host.opens.push_back({input});
+    auto id = b.ok("openTorrent")["torrent"]["id"];
+    json change{{"torrentId", id}, {"outer", json::array()}, {"info", json::array({
+        {{"key", {{"t", "str"}, {"utf8", "source"}}}, {"value", {{"t", "str"}, {"utf8", "new"}}}}})}};
+    auto first = b.ok("previewTorrentEdit", change);
+    auto p = b.ok("previewTorrentEdit", change);
+    CHECK(b.call("chooseEditorOutput", {{"token", first["token"]}})["error"]["code"] == "STALE_PREVIEW");
+    CHECK(p["infoChanged"] == true);
+    CHECK(p["oldHashes"] != p["newHashes"]);
+    CHECK(b.call("saveTorrentEdit", {{"token", p["token"]}})["error"]["code"] == "NO_OUTPUT");
+    b.host.saves.push_back(input);
+    CHECK(b.ok("chooseEditorOutput", {{"token", p["token"]}})["requiresReplace"] == true);
+    CHECK(b.call("saveTorrentEdit", {{"token", p["token"]}})["error"]["code"] == "OUTPUT_CONFLICT");
+    CHECK(service::read_small_file(input) == bytes);
+    service::write_file_atomic(input, bytes + "modified externally");
+    CHECK(b.call("saveTorrentEdit", {{"token", p["token"]}, {"replaceExisting", true}})["error"]["code"] == "SOURCE_CHANGED");
+    CHECK(service::read_small_file(input) == bytes + "modified externally");
+    service::write_file_atomic(input, bytes);
+    auto saved = b.ok("saveTorrentEdit", {{"token", p["token"]}, {"replaceExisting", true}});
+    CHECK(saved["torrent"]["infohashV1"] == p["newHashes"]["v1"]);
+    CHECK(core::Metainfo::parse(service::read_small_file(input)).info().find("source")->text() == "new");
+}
+
+TEST_CASE("editor bridge preserves binary extensions and rejects ambiguous or incomplete patches", "[bridge][editor][E02]")
+{
+    Bridge b;
+    auto payload = b.dir.path() / "data.bin";
+    auto input = b.dir.path() / "original.torrent";
+    test::write_file(payload, 100, 7);
+    auto meta = core::Metainfo::parse(test::make_torrent(payload, core::TorrentFormat::V1, 16384));
+    service::write_file_atomic(input, core::apply_outer_edit(meta, {{"large", core::bencode::Value::string(std::string(100000, 'x'))}}));
+    b.host.opens.push_back({input});
+    auto id = b.ok("openTorrent")["torrent"]["id"];
+    auto large = b.ok("getTorrentField", {{"torrentId", id}, {"scope", "top"}, {"key", {{"t", "str"}, {"utf8", "large"}}}});
+    CHECK(large["editable"] == false);
+    CHECK(large["value"]["truncated"] == true);
+    auto change = json{{"key", {{"t", "bytes"}, {"hex", "00ff"}}}, {"value", {{"t", "int"}, {"v", "900719925474099312345"}}}};
+    auto p = b.ok("previewTorrentEdit", {{"torrentId", id}, {"outer", json::array({change})}, {"info", json::array()}});
+    b.host.saves.push_back(b.dir.path() / "copy.torrent");
+    b.ok("chooseEditorOutput", {{"token", p["token"]}});
+    auto new_id = b.ok("saveTorrentEdit", {{"token", p["token"]}})["torrent"]["id"];
+    auto value = b.ok("getTorrentField", {{"torrentId", new_id}, {"scope", "top"}, {"key", change["key"]}});
+    CHECK(value["value"]["v"] == "900719925474099312345");
+    CHECK(b.call("previewTorrentEdit", {{"torrentId", id}, {"outer", json::array({change, change})}, {"info", json::array()}})["ok"] == false);
+    change["value"] = large["value"];
+    CHECK(b.call("previewTorrentEdit", {{"torrentId", id}, {"outer", json::array({change})}, {"info", json::array()}})["ok"] == false);
+    CHECK(b.call("getTorrentFields", {{"torrentId", id}, {"scope", "file"}})["ok"] == false);
+}
+
+TEST_CASE("binary imported comments stay in the native model instead of breaking JSON summaries", "[bridge][editor][E02]")
+{
+    Bridge b;
+    auto payload = b.dir.path() / "data.bin";
+    auto input = b.dir.path() / "original.torrent";
+    test::write_file(payload, 100, 7);
+    auto meta = core::Metainfo::parse(test::make_torrent(payload, core::TorrentFormat::V1, 16384));
+    service::write_file_atomic(input, core::apply_outer_edit(meta, {{"comment", core::bencode::Value::string(std::string("\xff\x00", 2))}}));
+    b.host.opens.push_back({input});
+    auto tor = b.ok("openTorrent")["torrent"];
+    CHECK(tor["comment"].is_null());
+    auto field = b.ok("getTorrentField", {{"torrentId", tor["id"]}, {"scope", "top"}, {"key", {{"t", "str"}, {"utf8", "comment"}}}});
+    CHECK(field["value"]["t"] == "bytes");
+    CHECK(field["value"]["hex"] == "ff00");
+}

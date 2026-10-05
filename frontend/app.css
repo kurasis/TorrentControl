@@ -356,3 +356,11 @@ dialog::backdrop { background: rgb(0 0 0 / 0.4); }
 @media (forced-colors: active) {
   .segmented button[aria-checked="true"], .tabs [role="tab"][aria-selected="true"] { outline: 2px solid CanvasText; }
 }
+
+/* Expert metadata controls keep binary/large values bounded in the layout. */
+#metadata-editor { margin-top: 1.5rem; }
+#metadata-editor textarea { width: 100%; box-sizing: border-box; font-family: var(--mono, monospace); }
+.editor-fields { max-height: 18rem; overflow: auto; padding-left: 1.5rem; }
+.editor-fields li { margin: .25rem 0; overflow-wrap: anywhere; }
+#metadata-editor select, #editor-extension-key { max-width: 100%; min-width: 0; }
+#editor-preview-panel { border: 1px solid currentColor; border-radius: .5rem; padding: 1rem; margin-top: 1rem; }

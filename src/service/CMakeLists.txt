@@ -8,6 +8,7 @@ add_library(tc_service
     src/profiles.cpp
     src/sources.cpp
     src/storage.cpp
+    src/torrent_editor.cpp
 )
 add_library(TorrentControl::service ALIAS tc_service)
 

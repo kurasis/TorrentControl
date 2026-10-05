@@ -9,6 +9,7 @@
 // thread, and the host marshals them to the UI thread.
 
 #include "tc/core/metainfo.hpp"
+#include "tc/core/field_registry.hpp"
 #include "tc/service/batch.hpp"
 #include "tc/service/draft.hpp"
 #include "tc/service/jobs.hpp"
@@ -94,6 +95,12 @@ public:
     std::string verify_torrent(std::string const& id, std::filesystem::path const& payload_root);
     std::string magnet_for(std::string const& torrent_or_job_id) const;
     std::filesystem::path torrent_path(std::string const& id) const;
+    std::shared_ptr<core::Metainfo const> torrent_metainfo(std::string const& id) const;
+    nlohmann::json preview_torrent_edit(std::string const& id, core::OuterEdit const& outer,
+        core::InfoEdit const& info, bool remove_signatures, nlohmann::json const& display_changes = nlohmann::json::array());
+    nlohmann::json editor_preview(std::string const& token) const;
+    nlohmann::json choose_editor_output(std::string const& token, std::filesystem::path const& path);
+    nlohmann::json save_torrent_edit(std::string const& token, bool replace_existing);
 
     // ---- Projects and settings -------------------------------------------------
     void save_project(std::filesystem::path const& path);
@@ -117,6 +124,12 @@ private:
     struct OpenedTorrent {
         std::filesystem::path path;
         std::shared_ptr<core::Metainfo const> meta;
+    };
+    struct PendingEdit {
+        std::string torrent_id;
+        std::shared_ptr<core::MetadataPreview const> candidate;
+        nlohmann::json summary;
+        std::filesystem::path output;
     };
 
     void check_revision(std::optional<std::uint64_t> revision) const;
@@ -151,6 +164,11 @@ private:
     std::uint64_t next_batch_ = 1;
     std::map<std::string, OpenedTorrent> torrents_;
     std::uint64_t next_torrent_ = 1;
+    nlohmann::json selected_torrent_ = nullptr;
+    // One immutable candidate per opened torrent. A newer preview invalidates
+    // its previous token, including any output selected for that token.
+    std::map<std::string, PendingEdit> edits_;
+    std::uint64_t next_edit_ = 1;
     std::unique_ptr<JobScheduler> jobs_;
 };
 

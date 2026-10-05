@@ -37,6 +37,18 @@
   let scan = { state: "empty", sourcesRevision: "0" };
   const settings = Object.assign({ theme: "system", language: "en", mode: "simple", openClientWithoutAsking: false }, config.settings);
   const jobs = [];
+  let torrent = config.torrent ?? null;
+  let editorPreview = config.editorPreview ?? null;
+  const registry = [
+    { scope: "top", key: "comment", support: "form", type: "str", editable: true, validation: "text", reference: "BEP 3" },
+    { scope: "top", key: "announce-list", support: "form", type: "list", editable: true, validation: "tracker-tiers", reference: "BEP 12" },
+    { scope: "top", key: "httpseeds", support: "form", type: "list", editable: true, validation: "http-seeds", reference: "BEP 17" },
+    { scope: "info", key: "source", support: "form", type: "str", editable: true, validation: "text", reference: "nonstandard" },
+    { scope: "info", key: "pieces", support: "computed", type: "str", editable: false, validation: "rebuild", reference: "BEP 3" },
+  ];
+  const values = { "top:comment": { t: "str", utf8: "Original comment" }, "info:source": { t: "str", utf8: "old" },
+    "info:pieces": { t: "bytes", hex: "00ff" } };
+  let editorCounter = 0;
 
   function snapshotDraft() {
     return { ...draft, revision: String(revision), scan, outputAuto: true, canUndo: false };
@@ -73,7 +85,38 @@
     checkSelfTestProfile: (p) => ({ persisted: config.selfTestPersistence !== false
       && profiles.some((profile) => profile.id === p.profileId && profile.name === p.name) }),
     getEngineInfo: () => ({ appVersion: "0.0.0-test", engineVersion: "libtorrent 2.1.2", protocolVersion: 1 }),
-    getSnapshot: () => ({ draft: snapshotDraft(), scan, jobs, settings, profiles }),
+    getSnapshot: () => ({ draft: snapshotDraft(), scan, jobs, settings, profiles, torrent, editorPreview }),
+    openTorrent: () => {
+      torrent = { id: "t-1", name: "Original", format: "hybrid", path: "C:\\data\\original.torrent", problems: [],
+        realFiles: 1, paddingFiles: 0, payloadBytes: "100", pieceLength: "16384", infohashV1: "a".repeat(40), infohashV2: "b".repeat(64) };
+      return { torrent };
+    },
+    getFieldRegistry: () => ({ fields: registry }),
+    getTorrentFields: (p) => ({ total: p.scope === "info" ? 2 : 1,
+      rows: registry.filter((f) => f.scope === p.scope && values[`${p.scope}:${f.key}`]).map((f) =>
+        ({ key: { t: "str", utf8: f.key }, value: values[`${p.scope}:${f.key}`], descriptor: f, editable: f.editable })) }),
+    getTorrentField: (p) => {
+      const f = registry.find((f) => f.scope === p.scope && f.key === p.key.utf8);
+      return { key: p.key, value: values[`${p.scope}:${p.key.utf8}`] ?? null, descriptor: f ?? null,
+        editable: f?.editable ?? true, signed: config.signedTorrent ?? false };
+    },
+    previewTorrentEdit: (p) => {
+      if (config.editorPreviewError) throw new Error(config.editorPreviewError);
+      const infoChanged = p.info.length > 0;
+      editorPreview = { token: `edit-${++editorCounter}`, torrentId: torrent.id, infoChanged, rawInfoPreserved: !infoChanged,
+        oldHashes: { v1: "a".repeat(40), v2: "b".repeat(64) }, newHashes: { v1: (infoChanged ? "c" : "a").repeat(40), v2: (infoChanged ? "d" : "b").repeat(64) },
+        signaturesRemoved: !!p.removeSignatures && infoChanged, outputChosen: false, requiresReplace: false };
+      return editorPreview;
+    },
+    chooseEditorOutput: () => config.editorCancel ? { cancelled: true }
+      : (editorPreview = { ...editorPreview, outputChosen: true, output: "C:\\data\\original.edited.torrent", requiresReplace: !!config.editorExisting }),
+    saveTorrentEdit: () => {
+      if (config.editorSaveError) throw new Error(config.editorSaveError);
+      torrent = { ...torrent, id: "t-2", path: editorPreview.output, infohashV1: editorPreview.newHashes.v1, infohashV2: editorPreview.newHashes.v2 };
+      editorPreview = null;
+      return { torrent, guaranteeNote: "" };
+    },
+    getTorrentFiles: () => ({ total: 0, files: [] }),
     selectSources: () => {
       addSource(config.sourceName ?? "Holiday photos");
       return { draft: snapshotDraft() };
@@ -168,5 +211,5 @@
     postMessage: (text) => handle(text, null),
     postMessageWithAdditionalObjects: (text, objects) => handle(text, objects),
   };
-  window.__mock = { requests, emit, addSource, draft, ops };
+  window.__mock = { requests, emit, addSource, draft, ops, config };
 })();

@@ -321,7 +321,7 @@ std::vector<MetainfoFile> metainfo_files(Metainfo const& m)
     return files;
 }
 
-std::vector<std::string> validate_metainfo(Metainfo const& m)
+std::vector<std::string> validate_metainfo(Metainfo const& m, bool require_canonical_info)
 {
     std::vector<std::string> problems;
     std::vector<MetainfoFile> files;
@@ -333,7 +333,9 @@ std::vector<std::string> validate_metainfo(Metainfo const& m)
     }
 
     bencode::Value const& info = m.info();
-    check_canonical(info, problems, "info");
+    // BEP 52 requires canonical info. Legacy v1 imports may retain their raw
+    // ordering during outer-only edits; every structural check still runs.
+    if (require_canonical_info || m.format() != MetainfoFormat::V1) check_canonical(info, problems, "info");
 
     auto const piece_length = static_cast<std::uint64_t>(info.find("piece length")->as_int64().value_or(0));
     bool const has_v2 = m.format() != MetainfoFormat::V1;

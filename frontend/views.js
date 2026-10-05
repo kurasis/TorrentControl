@@ -5,6 +5,7 @@ import { has, t } from "./i18n.js";
 import { h, replace } from "./dom.js";
 import { exactBytes, formatBytes, formatDuration, percent, PIECE_SIZES } from "./format.js";
 import { VirtualList } from "./virtual-list.js";
+import { renderMetadataEditor } from "./metadata-editor.js";
 
 const TABS = ["files", "general", "trackers", "webSeeds", "metadata", "expert", "jobs"];
 const TAB_LABEL = {
@@ -32,6 +33,7 @@ export function workspaceKey(state) {
     state.filter,
     state.selectedSource,
     state.torrent?.id,
+    state.editor?.version,
     state.profiles.map((p) => p.id),
     state.validation?.draftRevision,
     job ? [job.id, job.version] : null,
@@ -471,7 +473,7 @@ function renderExpertTab(state, actions) {
     return h("div", {},
       h("p", {}, t("expertIntro")),
       h("button", { type: "button", id: "expert-open", onclick: () => actions.openTorrent() }, t("openTorrent")),
-      note("bencodeLater"));
+      h("p", { class: "note" }, t("editorScopeHint")));
   }
   const files = h("div", { id: "torrent-files", class: "files" });
   new VirtualList(files, {
@@ -511,7 +513,7 @@ function renderExpertTab(state, actions) {
       h("button", { type: "button", id: "expert-open", onclick: () => actions.openTorrent() }, t("openTorrent"))),
     h("h3", {}, t("summaryFiles")),
     files,
-    note("bencodeLater"));
+    renderMetadataEditor(state, actions.renderEditor, actions.metadataSaved));
 }
 
 function renderJobsTab(state, actions) {
