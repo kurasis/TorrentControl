@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TorrentControl</title>
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="titlebar">
+    <h1 data-i18n="appTitle">TorrentControl</h1>
+    <span class="badge" data-i18n="devBuild">Development build</span>
+    <div class="segmented" role="radiogroup" data-i18n-label="modeLabel" id="mode-switch">
+      <button type="button" role="radio" data-mode="simple" data-i18n="modeSimple">Simple</button>
+      <button type="button" role="radio" data-mode="advanced" data-i18n="modeAdvanced">Advanced</button>
+    </div>
+    <nav class="toolbar" aria-label="File">
+      <button type="button" id="btn-new" data-i18n="newDraft">New</button>
+      <button type="button" id="btn-open-project" data-i18n="openProject">Open project…</button>
+      <button type="button" id="btn-save-project" data-i18n="saveProject">Save project…</button>
+      <button type="button" id="btn-open-torrent" data-i18n="openTorrent">Open torrent…</button>
+    </nav>
+    <label class="compact"><span data-i18n="themeLabel">Theme</span>
+      <select id="theme-select">
+        <option value="system" data-i18n="themeSystem">System</option>
+        <option value="light" data-i18n="themeLight">Light</option>
+        <option value="dark" data-i18n="themeDark">Dark</option>
+      </select>
+    </label>
+    <label class="compact"><span data-i18n="languageLabel">Language</span>
+      <select id="language-select">
+        <option value="" data-i18n="languageSystem">System</option>
+        <option value="en">English</option>
+        <option value="ru">Русский</option>
+      </select>
+    </label>
+  </header>
+
+  <div id="unavailable" class="banner error" hidden data-i18n="bridgeUnavailable">The native application is not available.</div>
+
+  <div class="layout">
+    <main id="workspace" aria-live="off"></main>
+    <aside id="review" aria-labelledby="review-heading"></aside>
+  </div>
+
+  <section id="jobs-panel" aria-labelledby="jobs-heading"></section>
+
+  <dialog id="dialog" aria-modal="true"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

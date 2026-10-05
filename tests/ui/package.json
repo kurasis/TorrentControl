@@ -1,0 +1,11 @@
+{
+  "name": "torrentcontrol-ui-tests",
+  "private": true,
+  "description": "Browser tests for the TorrentControl page against a mocked native bridge",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

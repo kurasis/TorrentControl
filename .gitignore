@@ -1,0 +1,16 @@
+# Build outputs
+/build/
+/out/
+/vcpkg_installed/
+CMakeUserPresets.json
+
+# IDE
+/.vs/
+/.vscode/
+*.user
+
+# Python
+__pycache__/
+*.pyc
+/.vcpkg/
+/.vcpkg-cache/

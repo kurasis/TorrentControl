@@ -1,0 +1,187 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Must match "builtin-baseline" in vcpkg.json.
+  VCPKG_COMMIT: 3cbc1db4d867ec83c89fba4c461321c11f78b5e3
+  VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
+  VCPKG_DISABLE_METRICS: 1
+
+jobs:
+  windows:
+    name: Windows x64 (MSVC 14.44)
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/.vcpkg-cache,readwrite
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check vcpkg pin
+        shell: bash
+        run: |
+          grep -q "\"builtin-baseline\": \"$VCPKG_COMMIT\"" vcpkg.json
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_COMMIT }}
+          path: .vcpkg
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .vcpkg-cache
+          key: vcpkg-windows-x64-static-md-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-windows-x64-static-md-${{ env.VCPKG_COMMIT }}-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: |
+          if not exist .vcpkg-cache mkdir .vcpkg-cache
+          .vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Set up MSVC (pinned toolset 14.44)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          toolset: "14.44"
+
+      # The developer environment points VCPKG_ROOT at the vcpkg bundled with
+      # Visual Studio; restore the pinned checkout.
+      - name: Use pinned vcpkg
+        shell: bash
+        run: echo "VCPKG_ROOT=$GITHUB_WORKSPACE/.vcpkg" >> "$GITHUB_ENV"
+
+      - name: Install Ninja
+        run: python -m pip install ninja==1.11.1.1
+
+      - name: Configure
+        run: cmake --preset windows-x64-release -DTC_REQUIRE_PINNED_TOOLCHAIN=ON
+
+      # Saved right after dependencies are built, so a later build or test
+      # failure does not throw away the (slow) dependency build.
+      - name: Save vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Build
+        run: cmake --build --preset windows-x64-release
+
+      - name: Test (unit + headless integration proof)
+        run: ctest --preset windows-x64-release
+
+      - name: WebView2 shell self-test
+        shell: pwsh
+        run: |
+          $exe = "build/windows-x64-release/src/app/windows/TorrentControl.exe"
+          $log = Join-Path $env:RUNNER_TEMP "selftest.log"
+          $p = Start-Process -FilePath $exe -ArgumentList "--self-test", "`"$log`"" -PassThru
+          if (-not $p.WaitForExit(180000)) { $p.Kill(); throw "self-test did not finish" }
+          if (Test-Path $log) { Get-Content $log }
+          if ($p.ExitCode -ne 0) { throw "self-test failed with exit code $($p.ExitCode)" }
+
+      - name: Upload unsigned development build
+        uses: actions/upload-artifact@v4
+        with:
+          name: TorrentControl-dev-unsigned-windows-x64
+          path: |
+            build/windows-x64-release/src/app/windows/TorrentControl.exe
+            build/windows-x64-release/src/app/windows/TorrentControl.pdb
+            build/windows-x64-release/src/app/windows/frontend/
+            build/windows-x64-release/tools/tc-proof/tc-proof.exe
+          if-no-files-found: error
+
+  linux:
+    name: Linux x64 (headless core, GCC)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/.vcpkg-cache,readwrite
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_COMMIT }}
+          path: .vcpkg
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .vcpkg-cache
+          key: vcpkg-x64-linux-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-x64-linux-${{ env.VCPKG_COMMIT }}-
+
+      - name: Bootstrap vcpkg
+        run: |
+          mkdir -p .vcpkg-cache
+          .vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Configure
+        run: cmake --preset linux-release
+
+      # Saved right after dependencies are built, so a later build or test
+      # failure does not throw away the (slow) dependency build.
+      - name: Save vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Build
+        run: cmake --build --preset linux-release
+
+      - name: Test (unit + headless integration proof)
+        run: ctest --preset linux-release
+
+  ui:
+    name: UI (Chromium, mocked bridge)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: tests/ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/ui/package-lock.json
+
+      - name: Install test dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run UI tests
+        run: npx playwright test
+        env:
+          CI: "1"
