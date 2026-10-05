@@ -46,7 +46,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .vcpkg-cache
-          key: vcpkg-windows-x64-static-md-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          # Rotate the older partial cache so the completed native toolchain
+          # (including libtorrent) is saved once instead of rebuilt each run.
+          key: vcpkg-windows-x64-static-md-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}-native-flow-v1
           restore-keys: vcpkg-windows-x64-static-md-${{ env.VCPKG_COMMIT }}-
 
       - name: Bootstrap vcpkg

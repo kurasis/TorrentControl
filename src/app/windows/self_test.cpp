@@ -9,8 +9,8 @@
 
 namespace tc::app {
 
-NativeSelfTest::NativeSelfTest(HWND owner, std::filesystem::path root)
-    : owner_(owner), root_(std::move(root))
+NativeSelfTest::NativeSelfTest(HWND owner, std::filesystem::path root, std::function<void(std::string const&)> log)
+    : owner_(owner), log_(std::move(log)), root_(std::move(root))
 {
     auto const payload = root_ / L"payload" / L"набор данных";
     std::filesystem::create_directories(payload);
@@ -39,21 +39,24 @@ nlohmann::json NativeSelfTest::step(nlohmann::json const& payload)
     return nlohmann::json::object();
 }
 
-void CALLBACK NativeSelfTest::tick(HWND, UINT, UINT_PTR id, DWORD)
+void NativeSelfTest::on_timer()
 {
-    auto* test = reinterpret_cast<NativeSelfTest*>(id);
-    if (GetTickCount64() >= test->deadline_) {
-        test->dialog_->Close(HRESULT_FROM_WIN32(ERROR_TIMEOUT));
+    if (!dialog_) return;
+    if (!ticked_) { ticked_ = true; log_("DIALOG timer dispatched"); }
+    if (GetTickCount64() >= deadline_) {
+        log_("DIALOG timeout");
+        dialog_->Close(HRESULT_FROM_WIN32(ERROR_TIMEOUT));
         return;
     }
-    auto window = wil::com_ptr<IFileDialog>(test->dialog_).try_query<IOleWindow>();
+    auto window = wil::com_ptr<IFileDialog>(dialog_).try_query<IOleWindow>();
     HWND dialog_window = nullptr;
     if (!window || FAILED(window->GetWindow(&dialog_window)) || !IsWindowVisible(dialog_window)) return;
-    test->shown_ = true;
-    if (test->cancel_) {
-        test->dialog_->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
-    } else if (!test->clicked_) {
-        test->clicked_ = true;
+    if (!shown_) log_("DIALOG visible");
+    shown_ = true;
+    if (cancel_) {
+        dialog_->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+    } else if (!clicked_) {
+        clicked_ = true;
         // Let the dialog validate the filename and populate its real result.
         // Close(S_OK) alone would bypass that path and cannot test selection.
         PostMessageW(dialog_window, WM_COMMAND, MAKEWPARAM(IDOK, BN_CLICKED), 0);
@@ -75,15 +78,19 @@ HRESULT NativeSelfTest::show_dialog(IFileDialog* dialog)
         if (FAILED(hr)) return hr;
     }
     dialog_ = dialog;
-    clicked_ = shown_ = false;
+    clicked_ = shown_ = ticked_ = false;
     deadline_ = GetTickCount64() + 15'000;
-    UINT_PTR const timer = SetTimer(owner_, reinterpret_cast<UINT_PTR>(this), 50, tick);
+    // Common item dialogs run their own message pump. Handle WM_TIMER in the
+    // owner's window procedure rather than depending on TIMERPROC dispatch.
+    UINT_PTR const timer = SetTimer(owner_, timer_id, 50, nullptr);
     if (!timer) {
         dialog_ = nullptr;
         return HRESULT_FROM_WIN32(GetLastError());
     }
+    log_("DIALOG show");
     HRESULT const hr = dialog->Show(owner_);
-    KillTimer(owner_, timer);
+    KillTimer(owner_, timer_id);
+    log_("DIALOG result " + std::to_string(static_cast<unsigned long>(hr)));
     dialog_ = nullptr;
     if (!shown_) throw bridge::BridgeError("SELF_TEST", "The common item dialog was not shown");
     if (SUCCEEDED(hr) && !cancel_) {

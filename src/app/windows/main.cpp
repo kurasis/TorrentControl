@@ -212,6 +212,10 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
         DestroyWindow(hwnd);
         return 0;
     case WM_TIMER:
+        if (wparam == tc::app::NativeSelfTest::timer_id && app && app->native_test) {
+            app->native_test->on_timer();
+            return 0;
+        }
         if (wparam == self_test_timer && app) {
             write_self_test_log(*app, "FAIL timeout waiting for the frontend");
             app->exit_code = 4;
@@ -298,7 +302,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
             service_options, [queue](nlohmann::json const& event) { queue->push(event); });
     }
     if (native_flow) {
-        app.native_test = std::make_unique<tc::app::NativeSelfTest>(hwnd, std::filesystem::path(data_dir));
+        app.native_test = std::make_unique<tc::app::NativeSelfTest>(hwnd, std::filesystem::path(data_dir),
+            [&app](std::string const& message) { write_self_test_log(app, message); });
         app.shell = std::make_unique<tc::app::WindowsHostServices>(hwnd,
             [&app](IFileDialog* dialog) { return app.native_test->show_dialog(dialog); });
     } else app.shell = std::make_unique<tc::app::WindowsHostServices>(hwnd);

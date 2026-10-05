@@ -12,21 +12,24 @@ namespace tc::app {
 // native-owned; the page selects named steps, never arbitrary filesystem paths.
 class NativeSelfTest {
 public:
-    NativeSelfTest(HWND owner, std::filesystem::path root);
+    static constexpr UINT_PTR timer_id = 2;
+    NativeSelfTest(HWND owner, std::filesystem::path root, std::function<void(std::string const&)> log);
     nlohmann::json step(nlohmann::json const& payload);
     HRESULT show_dialog(IFileDialog* dialog);
+    void on_timer();
     nlohmann::json checkpoint = nullptr;
     std::filesystem::path const& root() const { return root_; }
 
 private:
-    static void CALLBACK tick(HWND, UINT, UINT_PTR id, DWORD);
     HWND owner_;
+    std::function<void(std::string const&)> log_;
     std::filesystem::path root_;
     std::filesystem::path selection_;
     bool armed_ = false;
     bool cancel_ = false;
     bool clicked_ = false;
     bool shown_ = false;
+    bool ticked_ = false;
     IFileDialog* dialog_ = nullptr;
     ULONGLONG deadline_ = 0;
 };
