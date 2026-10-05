@@ -618,6 +618,44 @@ TEST_CASE("manifest pages are bounded and filterable", "[service][U02]")
     CHECK(filtered["total"] == 111); // file14, file140-149, file1400-1499
 }
 
+TEST_CASE("native manifest caches invalidate edits and retain live output checks", "[service][performance][U02]")
+{
+    Harness h;
+    auto root = h.dir.path() / "Alpha";
+    tc::test::write_file(root / "a.bin",100,1);
+    tc::test::write_file(root / "b.bin",200,2);
+    h.app->add_sources({root});
+    h.app->wait_for_scan();
+    h.app->update_draft({{"format","v1"},{"pieceLength",16384}},std::nullopt);
+    auto first = h.app->snapshot()["scan"]["summary"];
+    CHECK(first["paddingBytes"] == "0");
+    CHECK(h.app->validate_draft()["canCreate"] == true);
+    CHECK(h.app->manifest_page(0,1,"ALPHA")["total"] == 2);
+    CHECK(h.app->manifest_page(1,1,"alpha")["entries"].front()["torrentPath"] == "Alpha/b.bin");
+    h.app->update_draft({{"name","Beta"},{"format","hybrid"},{"pieceLength",32768}},std::nullopt);
+    auto changed = h.app->snapshot()["scan"]["summary"];
+    CHECK(changed["name"] == "Beta");
+    CHECK(changed["pieceLength"] == 32768);
+    CHECK(changed["paddingBytes"] != "0");
+    CHECK(h.app->manifest_page(0,50,"Alpha")["total"] == 0);
+    CHECK(h.app->manifest_page(0,50,"Beta")["total"] == 2);
+    CHECK(h.app->validate_draft()["canCreate"] == true);
+    auto output = core::path_from_utf8(h.app->draft_json()["output"].get<std::string>());
+    tc::test::write_file(output,3,1); // no draft revision changes
+    CHECK(h.app->validate_draft()["canCreate"] == false);
+    fs::remove(output);
+    CHECK(h.app->validate_draft()["canCreate"] == true);
+    h.app->update_draft({{"private",true},{"trackers",json::array()}},std::nullopt);
+    CHECK(h.app->validate_draft()["canCreate"] == false);
+    h.app->update_draft({{"private",false}},std::nullopt);
+    CHECK(h.app->validate_draft()["canCreate"] == true);
+    tc::test::write_file(root / "c.bin",300,3);
+    auto source = h.app->draft_json()["sources"].front()["id"].get<std::string>();
+    h.app->set_source_options(source,{{"recursive",true}},std::nullopt);
+    h.app->wait_for_scan();
+    CHECK(h.app->manifest_page(0,50,"Beta")["total"] == 3);
+}
+
 TEST_CASE("single and every batch mode enforce the same private policy", "[service][batch][profiles][U07]")
 {
     auto const* mode = GENERATE("single", "perFile", "perChildFolder");

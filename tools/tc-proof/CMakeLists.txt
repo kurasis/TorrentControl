@@ -10,3 +10,7 @@ endif()
 add_executable(tc-network-proof network_main.cpp)
 target_link_libraries(tc-network-proof PRIVATE TorrentControl::service)
 tc_set_warnings(tc-network-proof)
+
+add_executable(tc-native-proof native_main.cpp)
+target_link_libraries(tc-native-proof PRIVATE TorrentControl::bridge TorrentControl::service)
+tc_set_warnings(tc-native-proof)

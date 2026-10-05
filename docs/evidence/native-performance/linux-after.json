@@ -1,0 +1,37 @@
+{
+  "canCreate": true,
+  "files": 100000,
+  "filteredFiles": 1000,
+  "filteredPages": {
+    "maxMs": 0.872743,
+    "p50Ms": 0.608792,
+    "p95Ms": 0.849438,
+    "samples": 50
+  },
+  "firstFilterMs": 40.752477,
+  "firstSnapshotMs": 0.127629,
+  "maxResponseBytes": 55124,
+  "networkRequests": 0,
+  "peakRssBytes": 164118528,
+  "scanMs": 1789.8716,
+  "snapshot": {
+    "maxMs": 0.097635,
+    "p50Ms": 0.042103,
+    "p95Ms": 0.046198,
+    "samples": 5
+  },
+  "unfilteredPages": {
+    "maxMs": 2.70775,
+    "p50Ms": 0.714628,
+    "p95Ms": 1.037617,
+    "samples": 100
+  },
+  "validation": {
+    "maxMs": 1214.70377,
+    "p50Ms": 78.718869,
+    "p95Ms": 78.718869,
+    "samples": 3
+  },
+  "fixtureCreationMs": 2844.0455610016215,
+  "scope": "native C++ dispatcher and real filesystem; excludes WebView2 rendering"
+}

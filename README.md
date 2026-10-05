@@ -12,7 +12,8 @@ Microsoft Edge WebView2.
 > creation. The [M3 editor](docs/m3-metadata-editor.md) adds a native field registry,
 > binary-safe metadata forms, identity preview and safe Save As. Explicit
 > [network checks](docs/m3-network-diagnostics.md) cover trackers and sampled web seeds.
-> Performance and independent client compatibility are the next stage. Development builds are unsigned.
+> [Performance and independent client compatibility](docs/native-performance-compatibility.md)
+> are in progress. Development builds are unsigned.
 
 ## Repository layout
 

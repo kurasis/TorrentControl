@@ -191,10 +191,12 @@ indices, пагинация verification и metadata, предел исходя�
    Начать с локальных HTTP/UDP fixtures N/S, не обращаться к публичным трекерам
    в тестах. Разделить «URL записан» и «сервер проверен» в интерфейсе.
    Реализация, ограничения и fixtures: [отчёт диагностики](m3-network-diagnostics.md).
-4. **Закрыть performance и совместимость.** Native UI benchmark, single-pass
+4. **Performance и совместимость — начаты, gates ещё открыты.** Native UI benchmark, single-pass
    instrumentation, память/IO на больших деревьях и slow/UNC sources. Проверить
    созданные v1/v2/hybrid torrents в двух независимо реализованных движках;
    Python reference полезен, но совместимость с клиентами пока не доказана.
+   Первые реальные native measurements, кеширование и ограничения второго
+   клиента: [отчёт этапа](native-performance-compatibility.md).
 5. **M4: распространение.** Offline WebView2 prerequisite, Windows 10/11 clean
    machine tests без IDE/Python/vcpkg, установщик/удаление, license/SBOM/notices,
    signing и release artifacts. Выпускать после предыдущих acceptance gates.

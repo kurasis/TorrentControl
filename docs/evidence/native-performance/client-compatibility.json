@@ -1,0 +1,104 @@
+{
+  "cases": [
+    {
+      "shape": "multifile",
+      "format": "v1",
+      "client": {
+        "bytesMissing": 0,
+        "engine": "anacrolix/torrent v1.61.0",
+        "hasV1": true,
+        "hasV2": false,
+        "infohashV1": "783df9b756cdfebeb2bd8ed42fdcfc90c5279cd6",
+        "infohashV2": "3d2d22aec4cd22a00efa4733c1563e652d2cbc75cd6b475b904da35814655538",
+        "network": "disabled",
+        "pieces": 7,
+        "supported": true,
+        "verified": true
+      },
+      "corruptionRejected": true,
+      "missingRejected": true,
+      "payloadUnchanged": true
+    },
+    {
+      "shape": "multifile",
+      "format": "v2",
+      "client": {
+        "engine": "anacrolix/torrent v1.61.0",
+        "metadataValidated": true,
+        "network": "disabled",
+        "reason": "pure-v2 AddTorrentOpt requires a nonzero v1 lookup ID; stock client import is not verified",
+        "supported": false
+      },
+      "payloadVerification": "unsupported; independent client gate remains open"
+    },
+    {
+      "shape": "multifile",
+      "format": "hybrid",
+      "client": {
+        "bytesMissing": 0,
+        "engine": "anacrolix/torrent v1.61.0",
+        "hasV1": true,
+        "hasV2": true,
+        "infohashV1": "c4a5fa431c5c3069c0067bd57943fac3b13aad1f",
+        "infohashV2": "d3b28aa879943246d0315363f3ad604e1e5ea9b1d072aa5ede9848a8c6da799c",
+        "network": "disabled",
+        "pieces": 12,
+        "supported": true,
+        "verified": true
+      },
+      "corruptionRejected": true,
+      "missingRejected": true,
+      "payloadUnchanged": true
+    },
+    {
+      "shape": "single-file",
+      "format": "v1",
+      "client": {
+        "bytesMissing": 0,
+        "engine": "anacrolix/torrent v1.61.0",
+        "hasV1": true,
+        "hasV2": false,
+        "infohashV1": "74ba8f59dcd416384333c45340bf56623efc475b",
+        "infohashV2": "4a56f9e6296e89f76be7a7f2d383da2dbb6ee262e584f9564666db46798f71bd",
+        "network": "disabled",
+        "pieces": 2,
+        "supported": true,
+        "verified": true
+      },
+      "corruptionRejected": true,
+      "missingRejected": true,
+      "payloadUnchanged": true
+    },
+    {
+      "shape": "single-file",
+      "format": "v2",
+      "client": {
+        "engine": "anacrolix/torrent v1.61.0",
+        "metadataValidated": true,
+        "network": "disabled",
+        "reason": "pure-v2 AddTorrentOpt requires a nonzero v1 lookup ID; stock client import is not verified",
+        "supported": false
+      },
+      "payloadVerification": "unsupported; independent client gate remains open"
+    },
+    {
+      "shape": "single-file",
+      "format": "hybrid",
+      "client": {
+        "bytesMissing": 70003,
+        "engine": "anacrolix/torrent v1.61.0",
+        "hasV1": true,
+        "hasV2": true,
+        "infohashV1": "5f9e556307e2aa965fe82ae52efa8bd545497207",
+        "infohashV2": "f4fb5725a3ffdff31f3f5caaf4582014890ea91b7be86747e764b0104fda4c27",
+        "network": "disabled",
+        "pieces": 2,
+        "supported": true,
+        "verified": false
+      },
+      "clientImportLimitation": "Client resolves name/name for libtorrent single-file hybrid layout"
+    }
+  ],
+  "allClientsVerified": false,
+  "releaseGate": "open"
+}
