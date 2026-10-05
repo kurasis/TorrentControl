@@ -13,7 +13,8 @@
 реальные системные диалоги, v1/v2/hybrid create/open/verify, побайтное повторение
 проекта, сбой renderer и восстановление snapshot, перезапуск настроек и
 отсутствующий Runtime. Ручные проверки доступности, DPI и чистой установки
-остаются отдельными release gates; дальнейшая разработка — редактор M3.
+остаются отдельными release gates. [Редактор и registry M3](m3-metadata-editor.md)
+добавлены следующим пакетом; далее — сетевые diagnostics и N/S fixtures.
 
 ## Текущее состояние
 
@@ -32,7 +33,8 @@
 - Catch2, независимый Python verifier, интеграционные и Playwright тесты,
   Windows/Linux CI уже подготовлены. Наличие теста в acceptance.md не является
   доказательством прохождения этого теста на Windows в текущем импорте.
-- DiagnosticsService, registry расширенного редактора и установщик отсутствуют.
+- DiagnosticsService и установщик отсутствуют; registry и редактор описаны
+  в [m3-metadata-editor.md](m3-metadata-editor.md).
   Создание torrent не открывает libtorrent session и не требует сети.
 
 ## Выполненная проверка облачной среды
@@ -178,7 +180,7 @@ indices, пагинация verification и metadata, предел исходя�
    проходят; в настоящем WebView2 можно сохранить/переоткрыть проект и профиль,
    private-проверки одинаковы для single и batch. Зафиксировать эти сценарии
    регрессиями и обновить acceptance evidence.
-2. **Подготовить M3: редактор и registry.** Реестр полей с типом, областью
+2. **M3: редактор и registry — реализованы.** Реестр полей с типом, областью
    outer/info, влиянием на infohash и правилами безопасности. Outer edits
    сохраняют raw info; info edits показывают изменение идентификаторов;
    structural edits требуют rebuild; signatures не удаляются молча. Binary

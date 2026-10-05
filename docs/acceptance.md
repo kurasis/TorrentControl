@@ -12,6 +12,11 @@ Linux CI. M2 adds the U fixtures. N and S fixtures belong to M3. UI tests live
 in `tests/ui` (Playwright, Chromium) and run the bundled page against a mocked
 native bridge.
 
+The metadata portion of M3 is documented in [m3-metadata-editor.md](m3-metadata-editor.md).
+Its `[editor]` tests cover registry validation and the native preview/commit
+workflow; the Windows flow also edits and independently verifies two outputs.
+Network N/S tests remain outstanding.
+
 ## Format fixtures (F)
 
 | ID | Evidence |

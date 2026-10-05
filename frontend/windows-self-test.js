@@ -47,6 +47,11 @@ export async function runNativeFlow(actions, state, info) {
     check(state.draft.revision === saved.revision, "Recovery changed the draft");
     check(JSON.stringify([...state.jobs.keys()].sort()) === JSON.stringify(saved.jobs), "Recovery replayed or lost jobs");
     check(state.settings.language === "ru" && state.settings.theme === "dark", "Recovery lost settings");
+    if (saved.editorToken) {
+      check(state.torrent?.id === saved.torrentId, "Recovery lost the opened editor torrent");
+      check(state.editorPreview?.token === saved.editorToken, "Recovery lost the native metadata preview");
+      await until(() => document.getElementById("editor-preview-panel"), "restored editor preview");
+    }
     await until(() => document.documentElement.lang === "ru" && document.documentElement.dataset.theme === "dark", "restored appearance");
     return { ...saved.evidence, rendererRecovery: true, recoveredJobs: state.jobs.size };
   }
@@ -106,14 +111,67 @@ export async function runNativeFlow(actions, state, info) {
   const disk = await request("checkSelfTestOutput");
   check(disk.identical && disk.magnet === `${magnet}\n`, "Project bytes or exported magnet changed on disk");
 
+  // Use the actual HTML controls and Save As dialogs for metadata edits.
+  await request("selfTestStep", { name: "hybrid" });
+  await actions.openTorrent();
+  const originalTorrent = state.torrent;
+  const control = (id) => {
+    const element = document.getElementById(id);
+    check(element, `Missing editor control ${id}`);
+    return element;
+  };
+  const change = (id, value, event = "change") => {
+    const element = control(id);
+    element.value = value;
+    element.dispatchEvent(new Event(event, { bubbles: true }));
+  };
+  const saveEditor = async (name) => {
+    control("editor-preview").click();
+    await until(() => state.editorPreview && !state.editor.busy, "metadata preview");
+    const before = state.torrent.id;
+    await request("selfTestStep", { name });
+    control("editor-output").click();
+    await until(() => state.editorPreview.outputChosen && !state.editor.busy, "metadata destination");
+    await until(() => document.getElementById("editor-save"), "metadata save button");
+    control("editor-save").click();
+    await until(() => state.torrent.id !== before && state.editor?.torrentId === state.torrent.id, "saved metadata reopen");
+    await until(() => document.getElementById("metadata-editor")?.dataset.torrentId === state.torrent.id, "saved editor controls");
+  };
+  await until(() => document.getElementById("editor-add-known"), "metadata editor");
+  change("editor-add-known", "comment");
+  await until(() => state.editor.selection?.descriptor?.key === "comment" && !state.editor.busy, "comment field");
+  await until(() => document.getElementById("editor-value"), "comment input");
+  change("editor-value", "Нативная проверка редактора", "input");
+  await saveEditor("outer-edited");
+  check(state.torrent.infohashV1 === originalTorrent.infohashV1 && state.torrent.infohashV2 === originalTorrent.infohashV2,
+    "Outer edit changed the torrent identifiers");
+  change("editor-scope", "info");
+  await until(() => state.editor.scope === "info" && !state.editor.busy, "info dictionary");
+  await until(() => document.getElementById("metadata-editor")?.dataset.scope === "info", "info controls");
+  change("editor-add-known", "source");
+  await until(() => state.editor.selection?.descriptor?.key === "source" && !state.editor.busy, "source field");
+  await until(() => document.getElementById("editor-value"), "source input");
+  change("editor-value", "native-m3", "input");
+  await saveEditor("info-edited");
+  check(state.torrent.infohashV1 !== originalTorrent.infohashV1 && state.torrent.infohashV2 !== originalTorrent.infohashV2,
+    "Info edit did not change both hybrid identifiers");
+  const editingDisk = await request("checkSelfTestEdits");
+  check(editingDisk.rawInfoPreserved && editingDisk.payloadHashesPreserved && editingDisk.commentPreserved
+    && editingDisk.sourceEdited, "Saved metadata bytes failed independent native inspection");
+  // Leave one reviewed candidate unsaved, then recover it from the native
+  // snapshot following a real renderer failure. Do not replay a save.
+  const pending = await request("previewTorrentEdit", { torrentId: state.torrent.id,
+    outer: [{ key: { t: "str", utf8: "comment" }, value: { t: "str", utf8: "Pending after recovery" } }], info: [] });
+
   await actions.updateSettings({ language: "ru", theme: "dark", mode: "advanced" });
   snapshot = await request("getSnapshot");
   Object.assign(evidence, { nativeDialogs: true, dialogCancel: true, unicodePaths: true,
     formats: ["v1", "v2", "hybrid"], verified: 3, missingPayloadRejected: true,
-    projectIdentical: true, magnetSaved: true });
+    projectIdentical: true, magnetSaved: true, metadataEditor: true,
+    outerEditPreserved: true, infoEditChanged: true, editedOutputsVerified: 2 });
   // Store the checkpoint natively before crashing; a recovered page must get
   // its state from getSnapshot and must not repeat any earlier operation.
   await request("crashSelfTestRenderer", { revision: snapshot.draft.revision,
-    jobs: snapshot.jobs.map((j) => j.id).sort(), evidence });
+    jobs: snapshot.jobs.map((j) => j.id).sort(), torrentId: state.torrent.id, editorToken: pending.token, evidence });
   return null;
 }

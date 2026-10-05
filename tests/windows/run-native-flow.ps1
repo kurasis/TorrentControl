@@ -32,7 +32,7 @@ Invoke-SelfTest "--self-test-settings" (Join-Path $evidence "restart.log")
 
 # Independently hash the payload selected by the Windows dialogs. This checks
 # the actual files produced through WebView2, not a tc-proof substitute.
-foreach ($format in @("v1", "v2", "hybrid", "reopened")) {
+foreach ($format in @("v1", "v2", "hybrid", "reopened", "outer-edited", "info-edited")) {
     $torrent = Join-Path $data "output/$format.torrent"
     $report = & python tools/reference/verify_torrent.py $torrent --root (Join-Path $data "payload/набор данных")
     $code = $LASTEXITCODE

@@ -16,6 +16,7 @@
 #include <string_view>
 
 namespace tc::core {
+class Metainfo;
 
 // Throws CoreError(OutputConflict) when `output` is one of the manifest's
 // source files, by path or by file identity (hard-link aliases included).
@@ -34,6 +35,9 @@ enum class CommitStage {
 
 struct CommitOptions {
     bool replace_existing = false;
+    // Editor only: tolerate legacy v1 key ordering solely when the candidate
+    // contains this validated import's exact original raw info slice.
+    Metainfo const* preserved_info = nullptr;
     // When set, the output may not be one of these sources (section 14.1 step 1).
     Manifest const* manifest = nullptr;
     // Test seam: called at each stage. Throwing aborts the commit, which must

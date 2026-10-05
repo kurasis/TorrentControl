@@ -40,6 +40,7 @@ TEST_CASE("large structures are displayed lazily and cannot be saved back", "[br
     nlohmann::json const j = bridge::bencode_to_json(big, {.max_nodes = 10, .max_string_bytes = 4});
     CHECK(j["items"][8]["t"] == "int");
     CHECK(j["items"][9] == nlohmann::json{{"t", "elided"}, {"nodes", 1}});
+    CHECK(j["items"].size() == 10); // the omitted tail must not expand JSON
     CHECK_THROWS_AS(bridge::bencode_from_json(j), core::CoreError);
 
     nlohmann::json const s = bridge::bencode_to_json(Value::string("abcdefgh"), {.max_nodes = 10, .max_string_bytes = 4});
@@ -47,6 +48,18 @@ TEST_CASE("large structures are displayed lazily and cannot be saved back", "[br
     CHECK(s["len"] == 8);
     CHECK(s["truncated"] == true);
     CHECK_THROWS_AS(bridge::bencode_from_json(s), core::CoreError);
+}
+
+TEST_CASE("integer strings and dictionary keys obey the outgoing display budget", "[bridge][editor][U02]")
+{
+    Value::Dictionary entries;
+    for (int i = 0; i < 10000; ++i) entries.push_back({std::to_string(i), Value::string("value")});
+    auto const j = bridge::bencode_to_json(Value::dictionary(std::move(entries)), {10, 4});
+    CHECK(j.dump().size() < 1500);
+    CHECK_THROWS_AS(bridge::bencode_from_json(j), core::CoreError);
+    auto huge = bridge::bencode_to_json(Value::integer_text(std::string(10000, '9')), {10, 4});
+    CHECK(huge.dump().size() < 100);
+    CHECK_THROWS_AS(bridge::bencode_from_json(huge), core::CoreError);
 }
 
 TEST_CASE("malformed tagged values are rejected", "[bridge][E02][U01]")

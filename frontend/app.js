@@ -6,6 +6,7 @@ import { isAvailable, onEvent, request, requestWithFiles } from "./bridge.js";
 import { debounce, toast } from "./dom.js";
 import { renderWorkspace, renderReview, renderJobs, workspaceKey } from "./views.js";
 import { showResult, showProfileChange, showBatch, showConfirm, showSaveProfile, showMagnetCopy, closeDialog } from "./dialogs.js";
+import { loadMetadata } from "./metadata-editor.js";
 
 export const state = {
   draft: null,
@@ -15,6 +16,8 @@ export const state = {
   settings: { mode: "simple", theme: "system", language: "" },
   profiles: [],
   torrent: null,
+  editor: null,
+  editorPreview: null,
   tab: "files",
   filter: "",
   selectedJob: null,
@@ -140,6 +143,7 @@ async function sendPatch() {
 const sendPatchSoon = debounce(sendPatch, 350);
 
 export const actions = {
+  renderEditor: () => invalidate("workspace"),
   async selectSources(kind) {
     const r = await guarded(request("selectSources", { kind }));
     if (r?.draft) applyDraft(r.draft);
@@ -173,6 +177,8 @@ export const actions = {
     const r = await guarded(request("newDraft"));
     if (r?.draft) {
       state.torrent = null;
+      state.editor = null;
+      state.editorPreview = null;
       applyDraft(r.draft);
     }
   },
@@ -274,6 +280,9 @@ export const actions = {
     const r = await guarded(request("openTorrent"));
     if (r?.torrent) {
       state.torrent = r.torrent;
+      state.editor = null;
+      state.editorPreview = null;
+      await guarded(loadMetadata(state, invalidate));
       state.tab = "expert";
       await actions.updateSettings({ mode: "advanced" });
       invalidate();
@@ -283,6 +292,9 @@ export const actions = {
     const r = await guarded(request("openJobResult", { jobId }));
     if (r?.torrent) {
       state.torrent = r.torrent;
+      state.editor = null;
+      state.editorPreview = null;
+      await guarded(loadMetadata(state, invalidate));
       state.tab = "expert";
       closeDialog();
       await actions.updateSettings({ mode: "advanced" });
@@ -292,6 +304,14 @@ export const actions = {
   async verifyTorrent(torrentId) {
     const r = await guarded(request("verifyPayload", { torrentId }));
     if (r?.jobId) state.selectedJob = r.jobId;
+  },
+  async metadataSaved(result) {
+    state.torrent = result.torrent;
+    state.editor = null;
+    state.editorPreview = null;
+    if (result.guaranteeNote) toast(result.guaranteeNote);
+    await loadMetadata(state, invalidate);
+    invalidate();
   },
   async saveProject() {
     await sendPatch();
@@ -397,6 +417,12 @@ async function refresh() {
   state.scan = snap.scan;
   state.settings = snap.settings;
   state.profiles = snap.profiles;
+  state.torrent = snap.torrent ?? null;
+  state.editorPreview = snap.editorPreview ?? null;
+  if (state.torrent) {
+    state.tab = "expert";
+    await loadMetadata(state, invalidate);
+  } else state.editor = null;
   for (const job of snap.jobs) onJob(job);
   state.pendingFields.clear();
   applySettings();

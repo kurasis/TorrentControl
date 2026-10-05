@@ -33,7 +33,8 @@ nlohmann::json NativeSelfTest::step(nlohmann::json const& payload)
     else if (name == "wrong-payload") selection_ = root_ / L"payload";
     else if (name == "project") selection_ = root_ / L"output" / L"проект.tcproject";
     else if (name == "magnet") selection_ = root_ / L"output" / L"magnet.txt";
-    else if (name == "v1" || name == "v2" || name == "hybrid" || name == "reopened")
+    else if (name == "v1" || name == "v2" || name == "hybrid" || name == "reopened"
+        || name == "outer-edited" || name == "info-edited")
         selection_ = root_ / L"output" / core::path_from_utf8(name + ".torrent");
     else throw bridge::BridgeError("SELF_TEST", "Unknown native dialog step");
     armed_ = true;

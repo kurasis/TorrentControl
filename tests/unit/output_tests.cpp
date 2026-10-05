@@ -238,3 +238,24 @@ TEST_CASE("an actual partial write failure removes its temporary file", "[output
     else CHECK_FALSE(fs::exists(out));
 #endif
 }
+
+TEST_CASE("commit refuses inconsistent layouts and only preserves explicitly supplied v1 raw info", "[output][editor][E05]")
+{
+    tc::test::TempDir dir;
+    auto output = dir.path() / "copy.torrent";
+    auto inconsistent = Metainfo::parse(valid).root();
+    inconsistent.find("info")->set("length", bencode::Value::integer(100000));
+    CHECK_THROWS_AS(commit_output(output, bencode::encode(inconsistent)), CoreError);
+    CHECK_FALSE(fs::exists(output));
+    auto imported = Metainfo::parse("d4:infod4:name1:a6:lengthi1e12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee");
+    auto edited = apply_outer_edit(imported, {{"comment", bencode::Value::string("new")}});
+    CHECK_THROWS_AS(commit_output(output, edited), CoreError);
+    CommitOptions options;
+    options.preserved_info = &imported;
+    commit_output(output, edited, options);
+    CHECK(Metainfo::parse(tc::test::read_all(output)).raw_info() == imported.raw_info());
+    fs::remove(output);
+    auto another = Metainfo::parse("d4:infod4:name1:b6:lengthi1e12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee");
+    CHECK_THROWS_AS(commit_output(output, another.bytes(), options), CoreError);
+    CHECK_FALSE(fs::exists(output));
+}

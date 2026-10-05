@@ -3,6 +3,7 @@
 add_library(tc_core
     src/bencode.cpp
     src/error.cpp
+    src/field_registry.cpp
     src/file_payload_source.cpp
     src/manifest.cpp
     src/native_fs.cpp

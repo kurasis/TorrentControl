@@ -1,8 +1,10 @@
 #include "tc/bridge/app_operations.hpp"
+#include "tc/bridge/bencode_json.hpp"
 
 #include "tc/core/error.hpp"
 #include "tc/service/sources.hpp"
 #include "tc/service/storage.hpp"
+#include <set>
 
 namespace tc::bridge {
 
@@ -50,6 +52,52 @@ json object(json const& p, char const* key)
 json cancelled()
 {
     return json{{"cancelled", true}};
+}
+
+json descriptor(core::FieldDescriptor const& f)
+{
+    return {{"scope", f.scope}, {"key", f.key}, {"type", f.type}, {"formats", f.formats},
+        {"support", f.support}, {"editable", f.editable}, {"affectsHash", f.affects_hash},
+        {"reference", f.reference}, {"validation", f.validation}};
+}
+
+std::string field_key(json const& j)
+{
+    auto value = bencode_from_json(j);
+    if (!value.is_string() || value.text().empty() || value.text().size() > 4096)
+        throw BridgeError("INVALID_PAYLOAD", "Field key must contain 1 to 4096 bytes");
+    return value.text();
+}
+
+std::string scope(json const& p)
+{
+    auto s = str(p, "scope", 8);
+    if (s != "top" && s != "info") throw BridgeError("INVALID_PAYLOAD", "scope must be top or info");
+    return s;
+}
+
+core::OuterEdit edit_patch(json const& p, char const* key)
+{
+    auto it = p.find(key);
+    if (it == p.end() || !it->is_array() || it->size() > 100)
+        throw BridgeError("INVALID_PAYLOAD", "Edits must be an array of at most 100 fields");
+    core::OuterEdit edit;
+    for (auto const& entry : *it) {
+        auto k = field_key(entry.at("key"));
+        if (edit.contains(k)) throw BridgeError("INVALID_PAYLOAD", "Duplicate field edit");
+        auto const& v = entry.at("value");
+        edit.emplace(std::move(k), v.is_null() ? std::nullopt : std::optional(bencode_from_json(v)));
+    }
+    return edit;
+}
+
+bool complete(json const& j)
+{
+    if (j.is_object()) {
+        if (j.value("t", "") == "elided" || j.value("truncated", false)) return false;
+        for (auto const& v : j) if (!complete(v)) return false;
+    } else if (j.is_array()) for (auto const& v : j) if (!complete(v)) return false;
+    return true;
 }
 
 } // namespace
@@ -137,6 +185,76 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
     });
 
     // ---- Existing torrents and results ------------------------------------------------
+    d.register_operation("getFieldRegistry", [](json const&) {
+        json fields = json::array();
+        for (auto const& f : core::field_registry()) fields.push_back(descriptor(f));
+        return json{{"fields", std::move(fields)}};
+    });
+    d.register_operation("getTorrentFields", [&app](json const& p) {
+        auto meta = app.torrent_metainfo(str(p, "torrentId", 64));
+        auto s = scope(p);
+        auto const& dict = s == "info" ? meta->info() : meta->root();
+        auto offset = count(p, "offset", 0, 2'000'000);
+        auto limit = count(p, "limit", 50, 50);
+        auto const& entries = dict.entries();
+        json rows = json::array();
+        for (std::size_t i = offset; i < entries.size() && rows.size() < limit; ++i) {
+            auto const& e = entries[i];
+            auto const* f = core::find_field(s, e.key);
+            rows.push_back({{"key", bencode_to_json(core::bencode::Value::string(e.key))},
+                {"value", bencode_to_json(e.value, {8, 128})}, {"descriptor", f ? descriptor(*f) : json(nullptr)},
+                {"editable", e.key.size() <= 4096 && (!f || f->editable)}});
+        }
+        return json{{"rows", std::move(rows)}, {"total", entries.size()}};
+    });
+    d.register_operation("getTorrentField", [&app](json const& p) {
+        auto meta = app.torrent_metainfo(str(p, "torrentId", 64));
+        auto s = scope(p);
+        auto k = field_key(p.at("key"));
+        auto const* f = core::find_field(s, k);
+        auto const* value = (s == "info" ? meta->info() : meta->root()).find(k);
+        json shown = nullptr;
+        bool editable = !f || f->editable;
+        if (value) {
+            bool const small = core::bencode::encode(*value).size() <= 65536;
+            shown = bencode_to_json(*value, small ? DisplayBudget{10000, 65536} : DisplayBudget{64, 1024});
+            if (shown.dump().size() > 256 * 1024) shown = bencode_to_json(*value, {64, 1024});
+            editable = editable && small && complete(shown);
+        }
+        return json{{"key", p.at("key")}, {"value", std::move(shown)}, {"present", value != nullptr},
+            {"editable", editable}, {"descriptor", f ? descriptor(*f) : json(nullptr)},
+            {"signed", meta->root().find("signatures") != nullptr}};
+    });
+    d.register_operation("previewTorrentEdit", [&app](json const& p) {
+        auto id = str(p, "torrentId", 64);
+        auto outer = edit_patch(p, "outer");
+        auto info = edit_patch(p, "info");
+        auto meta = app.torrent_metainfo(id);
+        json changes = json::array();
+        auto describe = [&](core::OuterEdit const& patch, core::bencode::Value const& dict, char const* placement) {
+            for (auto const& [key, value] : patch) {
+                auto const* old = dict.find(key);
+                if ((!old && !value) || (old && value && core::metadata_values_equal(*old, *value))) continue;
+                changes.push_back({{"scope", placement}, {"key", bencode_to_json(core::bencode::Value::string(key))},
+                    {"before", old ? bencode_to_json(*old, {8, 256}) : json(nullptr)},
+                    {"after", value ? bencode_to_json(*value, {8, 256}) : json(nullptr)}});
+            }
+        };
+        describe(outer, meta->root(), "top");
+        describe(info, meta->info(), "info");
+        return app.preview_torrent_edit(id, outer, info, flag(p, "removeSignatures"), changes);
+    });
+    d.register_operation("chooseEditorOutput", [&app, &host](json const& p) {
+        auto token = str(p, "token", 64);
+        auto preview = app.editor_preview(token);
+        auto source = app.torrent_path(preview.at("torrentId").get<std::string>());
+        auto path = host.pick_save(SK::Torrent, core::to_utf8(source.stem()) + ".edited.torrent", source.parent_path());
+        if (!path) return cancelled();
+        return app.choose_editor_output(token, *path);
+    });
+    d.register_operation("saveTorrentEdit", [&app](json const& p) {
+        return app.save_torrent_edit(str(p, "token", 64), flag(p, "replaceExisting"));
+    });
     d.register_operation("openTorrent", [&app, &host](json const&) {
         auto paths = host.pick_open(OK::Torrent);
         if (paths.empty()) return cancelled();

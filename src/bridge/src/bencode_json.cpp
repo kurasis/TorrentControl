@@ -105,16 +105,30 @@ public:
         if (used_ >= budget_.max_nodes) return {{"t", "elided"}, {"nodes", count_nodes(v)}};
         ++used_;
         switch (v.type()) {
-        case core::bencode::Type::Integer: return {{"t", "int"}, {"v", v.text()}};
+        case core::bencode::Type::Integer:
+            if (v.text().size() > budget_.max_string_bytes)
+                return {{"t", "int"}, {"v", v.text().substr(0, budget_.max_string_bytes)}, {"truncated", true}};
+            return {{"t", "int"}, {"v", v.text()}};
         case core::bencode::Type::String: return string(v.text());
         case core::bencode::Type::List: {
             nlohmann::json items = nlohmann::json::array();
-            for (auto const& item : v.items()) items.push_back(value(item));
+            for (auto const& item : v.items()) {
+                bool const last = used_ >= budget_.max_nodes;
+                items.push_back(value(item));
+                if (last) break;
+            }
             return {{"t", "list"}, {"items", std::move(items)}};
         }
         case core::bencode::Type::Dictionary: {
             nlohmann::json entries = nlohmann::json::array();
-            for (auto const& e : v.entries()) entries.push_back({{"key", string(e.key)}, {"value", value(e.value)}});
+            for (auto const& e : v.entries()) {
+                if (used_ >= budget_.max_nodes) {
+                    entries.push_back({{"key", {{"t", "elided"}}}, {"value", {{"t", "elided"}}}});
+                    break;
+                }
+                ++used_; // keys also consume the display budget
+                entries.push_back({{"key", string(e.key)}, {"value", value(e.value)}});
+            }
             return {{"t", "dict"}, {"entries", std::move(entries)}};
         }
         }
@@ -133,11 +147,16 @@ std::string bytes_from_json(nlohmann::json const& j)
     std::string const t = j["t"];
     if (t == "str") {
         if (!j.contains("utf8") || !j["utf8"].is_string()) bad("str without utf8");
-        return j["utf8"].get<std::string>();
+        auto bytes = j["utf8"].get<std::string>();
+        if (!valid_utf8(bytes)) bad("str contains invalid UTF-8");
+        if (j.contains("len") && (!j["len"].is_number_unsigned() || j["len"].get<std::size_t>() != bytes.size())) bad("byte length does not match");
+        return bytes;
     }
     if (t == "bytes") {
         if (!j.contains("hex") || !j["hex"].is_string()) bad("bytes without hex");
-        return from_hex(j["hex"].get<std::string>());
+        auto bytes = from_hex(j["hex"].get<std::string>());
+        if (j.contains("len") && (!j["len"].is_number_unsigned() || j["len"].get<std::size_t>() != bytes.size())) bad("byte length does not match");
+        return bytes;
     }
     bad("expected a byte string");
 }
@@ -146,6 +165,7 @@ Value value_from_json(nlohmann::json const& j, int depth)
 {
     if (depth > 128) bad("nesting too deep");
     if (!j.is_object() || !j.contains("t") || !j["t"].is_string()) bad("missing tag");
+    if (j.value("truncated", false)) bad("a truncated display value cannot be saved");
     std::string const t = j["t"];
     if (t == "int") {
         if (!j.contains("v") || !j["v"].is_string()) bad("int without decimal text");
