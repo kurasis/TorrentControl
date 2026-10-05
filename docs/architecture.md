@@ -25,14 +25,14 @@ frontend (HTML/CSS/JS, bundled)            src/app/windows (NativeHost)
 
 ## Modules (specification section 3)
 
-| Module | Location | State at M2 |
+| Module | Location | Current state |
 | --- | --- | --- |
 | NativeHost | `src/app/windows` | Window, Runtime detection, WebView2 lifecycle, virtual-host asset mapping, navigation/new-window/permission/download blocking, renderer-failure reload, common item dialogs, Explorer and file-association actions, dropped-file paths, event marshaling, close prompt while jobs run |
-| Frontend | `frontend` | Simple and advanced modes, review summary, job queue, result/profile/batch dialogs, virtualized lists, light/dark theme, English and Russian strings |
+| Frontend | `frontend` | Simple and advanced modes, metadata editor with field/hash preview, review summary, job queue, result/profile/batch dialogs, virtualized lists, light/dark theme, English and Russian strings |
 | CommandBridge | `src/bridge` | Protocol v1 envelope, origin check, schema validation, stable error codes, `getEngineInfo`, application operations (`app_operations.*`), event envelope, tagged bencode JSON (`bencode_json.*`) |
 | ManifestService | `src/core/manifest.*`, `src/core/native_fs.*` | Native enumeration with reparse-point and cloud classification, exclusions, link policy, file identity, frozen observations, recheck, Unicode collision checks, limits |
 | TorrentEngine | `src/core/torrent_engine.*`, `src/core/hash_pipeline.*` | Preflight and resource estimates, parallel single-pass hashing, v1/v2/hybrid creation, output validation |
-| MetainfoService | `src/core/bencode.*`, `src/core/metainfo.*` | Lossless bencode, metainfo validation, outer and info edits, signatures, legacy labels, magnet export |
+| MetainfoService | `src/core/bencode.*`, `src/core/metainfo.*`, `src/core/field_registry.*`, `src/service/torrent_editor.cpp` | Field registry, immutable edit previews, lossless bencode, metainfo validation, outer and info edits, signatures, legacy labels, magnet export |
 | Verification | `src/core/verify.*` | Payload verification against any metainfo, per-file results |
 | PersistenceService | `src/core/output.*`, `src/service/storage.*` | Atomic output commit, atomic settings and project files, DPAPI-protected passkeys |
 | DiagnosticsService | — | M3 |
@@ -99,6 +99,13 @@ canonical decimal text, and the input byte range of every value. Identifiers
 are SHA-1/SHA-256 of the exact `info` slice. An outer-only edit writes a new
 top-level dictionary, copying the `info` slice and every untouched value
 byte-for-byte.
+
+The [metadata editor](m3-metadata-editor.md) validates native patches against
+the field registry, owns one immutable preview token and native output path,
+and saves through `commit_output`. Snapshots restore the selected torrent and
+reviewed candidate. Semantic no-ops preserve imported raw info and signatures.
+Only a validated legacy v1 import with the exact original info slice may retain
+noncanonical key ordering during an outer-only commit.
 
 ## Bridge security
 

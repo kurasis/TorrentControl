@@ -6,18 +6,19 @@ files and file collections, lossless metadata editing, and tracker/web-seed
 diagnostics. Built with C++20, [libtorrent](https://libtorrent.org) 2.1.2, and
 Microsoft Edge WebView2.
 
-> **Status:** milestone M2 (usable application). On top of the M1 core, the
+> **Status:** M2 complete, M3 metadata editor implemented. On top of the M1 core, the
 > app has simple and advanced modes, a job queue with pause, resume and
 > cancel, profiles with a change preview and undo, projects, and batch
-> creation. Tracker and web-seed diagnostics, the metadata registry and the
-> expert bencode editor arrive in M3. Development builds are unsigned.
+> creation. The [M3 editor](docs/m3-metadata-editor.md) adds a native field registry,
+> binary-safe metadata forms, identity preview and safe Save As. Tracker and
+> web-seed diagnostics remain the next stage. Development builds are unsigned.
 
 ## Repository layout
 
 | Path | Contents |
 | --- | --- |
-| `src/core` | Platform-independent engine: manifest, single-pass hasher, lossless bencode/metainfo layer |
-| `src/service` | Application service: draft, job queue, profiles, batch, projects, settings |
+| `src/core` | Platform-independent engine: manifest, single-pass hasher, lossless bencode/metainfo layer, field registry |
+| `src/service` | Application service: draft, job queue, profiles, batch, projects, settings, metadata previews |
 | `src/bridge` | Versioned JSON command bridge between the frontend and the native host |
 | `src/app/windows` | Win32 + WebView2 native host |
 | `frontend` | Bundled HTML/CSS/JS served from a fixed virtual origin |

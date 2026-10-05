@@ -180,7 +180,7 @@ indices, пагинация verification и metadata, предел исходя�
    проходят; в настоящем WebView2 можно сохранить/переоткрыть проект и профиль,
    private-проверки одинаковы для single и batch. Зафиксировать эти сценарии
    регрессиями и обновить acceptance evidence.
-2. **Подготовить M3: редактор и registry.** Реестр полей с типом, областью
+2. **M3: редактор и registry — реализованы.** Реестр полей с типом, областью
    outer/info, влиянием на infohash и правилами безопасности. Outer edits
    сохраняют raw info; info edits показывают изменение идентификаторов;
    structural edits требуют rebuild; signatures не удаляются молча. Binary
