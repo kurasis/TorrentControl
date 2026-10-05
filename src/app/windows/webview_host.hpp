@@ -11,6 +11,7 @@
 #include <wil/com.h>
 
 #include <deque>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -30,10 +31,12 @@ class WebViewHost {
 public:
     struct Options {
         std::wstring asset_dir;      // bundled frontend directory
+        std::wstring browser_executable_folder; // empty = installed Evergreen
         std::wstring user_data_dir;  // WebView2 profile directory
         std::wstring start_query;    // e.g. L"?selfTest=1"
         // Called once for an unrecoverable error; the host is unusable afterwards.
         std::function<void(HRESULT, std::wstring const&)> on_fatal;
+        std::function<void()> on_renderer_recovery;
     };
 
     WebViewHost(HWND window, Options options, bridge::Dispatcher const& dispatcher);
@@ -46,6 +49,8 @@ public:
     void resize();
     void notify_moved();
     void close();
+    // Invoked only by an operation registered for --self-test-flow.
+    HRESULT crash_renderer_for_self_test();
 
     // Answers the bridge requests queued since the last call. Requests are not
     // handled inside the WebView2 callback because handlers may show modal
@@ -65,6 +70,7 @@ private:
         std::string message;
         std::string source;
         std::vector<std::filesystem::path> attached;
+        std::uint64_t page_generation = 0;
     };
 
     HWND window_;
@@ -75,6 +81,7 @@ private:
     wil::com_ptr<ICoreWebView2> webview_;
     std::deque<PendingRequest> pending_;
     bool processing_ = false;
+    std::uint64_t page_generation_ = 0;
 };
 
 } // namespace tc::app

@@ -35,7 +35,7 @@
     acceptLargeResourceUse: false,
   };
   let scan = { state: "empty", sourcesRevision: "0" };
-  const settings = { theme: "system", language: "en", mode: "simple", openClientWithoutAsking: false };
+  const settings = Object.assign({ theme: "system", language: "en", mode: "simple", openClientWithoutAsking: false }, config.settings);
   const jobs = [];
 
   function snapshotDraft() {
@@ -67,6 +67,8 @@
   }
 
   const ops = {
+    getSelfTestState: () => ({ checkpoint: config.nativeCheckpoint ?? null,
+      rendererRecoveries: config.rendererRecoveries ?? 0, settingsOnly: config.settingsOnly ?? false }),
     reportSelfTest: () => ({}),
     checkSelfTestProfile: (p) => ({ persisted: config.selfTestPersistence !== false
       && profiles.some((profile) => profile.id === p.profileId && profile.name === p.name) }),

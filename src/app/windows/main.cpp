@@ -5,8 +5,12 @@
 //   TorrentControl.exe --self-test LOGFILE  check the bridge, HTML dialogs and
 //                                           profile persistence; log and exit
 //                                           (0 = success); used by CI
+//   TorrentControl.exe --self-test-flow LOGFILE  native dialogs/jobs/recovery
+//   TorrentControl.exe --self-test-settings LOGFILE --self-test-data DIR
+//                                           verify settings in a fresh process
 
 #include "host_services.hpp"
+#include "self_test.hpp"
 #include "webview_host.hpp"
 
 #include "tc/bridge/app_operations.hpp"
@@ -35,6 +39,7 @@ constexpr wchar_t runtime_download_url[] = L"https://developer.microsoft.com/mic
 constexpr UINT_PTR self_test_timer = 1;
 constexpr UINT self_test_timeout_ms = 120'000;
 constexpr UINT wm_service_events = WM_APP + 2;
+constexpr UINT wm_self_test_crash = WM_APP + 3;
 
 // Events raised on service worker threads, handed to the UI thread.
 class EventQueue {
@@ -85,6 +90,8 @@ struct AppState {
     std::unique_ptr<EventQueue> events;
     tc::bridge::EventChannel channel;
     std::unique_ptr<tc::app::WindowsHostServices> shell;
+    std::unique_ptr<tc::app::NativeSelfTest> native_test;
+    int renderer_recoveries = 0;
     std::unique_ptr<tc::service::AppService> service;
     std::unique_ptr<tc::app::WebViewHost> host;
     tc::bridge::Dispatcher dispatcher;
@@ -131,10 +138,22 @@ std::wstring app_data_dir()
 }
 
 // The Runtime is detected before any web UI is constructed (section 16).
-std::optional<std::wstring> installed_runtime_version()
+std::wstring configured_runtime_folder()
+{
+    constexpr wchar_t variable[] = L"WEBVIEW2_BROWSER_EXECUTABLE_FOLDER";
+    DWORD const size = GetEnvironmentVariableW(variable, nullptr, 0);
+    if (size == 0) return {};
+    std::wstring folder(size, L'\0');
+    DWORD const length = GetEnvironmentVariableW(variable, folder.data(), size);
+    if (length == 0 || length >= size) return {};
+    folder.resize(length);
+    return folder;
+}
+
+std::optional<std::wstring> installed_runtime_version(std::wstring const& folder)
 {
     LPWSTR version = nullptr;
-    HRESULT const hr = GetAvailableCoreWebView2BrowserVersionString(nullptr, &version);
+    HRESULT const hr = GetAvailableCoreWebView2BrowserVersionString(folder.empty() ? nullptr : folder.c_str(), &version);
     std::optional<std::wstring> result;
     if (SUCCEEDED(hr) && version != nullptr) result = version;
     CoTaskMemFree(version);
@@ -145,7 +164,7 @@ int show_runtime_missing(bool quiet)
 {
     if (quiet) return 3;
     int const choice = MessageBoxW(nullptr,
-        L"TorrentControl needs the Microsoft Edge WebView2 Runtime, which is not installed on this computer.\n\n"
+        L"TorrentControl cannot find the Microsoft Edge WebView2 Runtime configured for this application.\n\n"
         L"Open the official download page now?",
         L"TorrentControl", MB_YESNO | MB_ICONINFORMATION);
     if (choice == IDYES) ShellExecuteW(nullptr, L"open", runtime_download_url, nullptr, nullptr, SW_SHOWNORMAL);
@@ -177,6 +196,16 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
     case tc::app::wm_bridge_request:
         if (app && app->host) app->host->process_requests();
         return 0;
+    case wm_self_test_crash:
+        if (app && app->native_test && app->host) {
+            HRESULT const hr = app->host->crash_renderer_for_self_test();
+            if (FAILED(hr)) {
+                write_self_test_log(*app, "FAIL renderer crash could not be requested");
+                app->exit_code = 7;
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            }
+        }
+        return 0;
     case wm_service_events:
         if (app && app->events && app->host) {
             for (auto const& event : app->events->take()) app->host->post_to_page(app->channel.wrap(event));
@@ -195,6 +224,10 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
         DestroyWindow(hwnd);
         return 0;
     case WM_TIMER:
+        if (wparam == tc::app::NativeSelfTest::timer_id && app && app->native_test) {
+            app->native_test->on_timer();
+            return 0;
+        }
         if (wparam == self_test_timer && app) {
             write_self_test_log(*app, "FAIL timeout waiting for the frontend");
             app->exit_code = 4;
@@ -216,10 +249,18 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
 {
     AppState app;
+    bool native_flow = false;
+    bool settings_test = false;
+    std::optional<std::wstring> self_test_data;
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i < argc; ++i) {
-        if (std::wstring_view(argv[i]) == L"--self-test" && i + 1 < argc) app.self_test_log = argv[++i];
+        auto const arg = std::wstring_view(argv[i]);
+        if ((arg == L"--self-test" || arg == L"--self-test-flow" || arg == L"--self-test-settings") && i + 1 < argc) {
+            settings_test = arg == L"--self-test-settings";
+            native_flow = arg != L"--self-test";
+            app.self_test_log = argv[++i];
+        } else if (arg == L"--self-test-data" && i + 1 < argc) self_test_data = argv[++i];
     }
     LocalFree(argv);
     bool const self_test = app.self_test_log.has_value();
@@ -228,7 +269,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     // WebView2 requires a single-threaded apartment on the UI thread.
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) return 1;
 
-    std::optional<std::wstring> const runtime = installed_runtime_version();
+    std::wstring const runtime_folder = configured_runtime_folder();
+    std::optional<std::wstring> const runtime = installed_runtime_version(runtime_folder);
     if (!runtime) {
         write_self_test_log(app, "FAIL WebView2 Runtime not found");
         int const code = show_runtime_missing(self_test);
@@ -240,8 +282,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     tc::bridge::register_core_operations(app.dispatcher, TC_APP_VERSION);
     // Self-tests must not alter the real user's profiles or WebView2 data.
     std::wstring const data_dir = self_test
-        ? (std::filesystem::path(*app.self_test_log).parent_path()
-            / (L"TorrentControl-self-test-" + std::to_wstring(GetCurrentProcessId()))).wstring()
+        ? self_test_data.value_or((std::filesystem::path(*app.self_test_log).parent_path()
+            / (L"TorrentControl-self-test-" + std::to_wstring(GetCurrentProcessId()))).wstring())
         : app_data_dir();
 
     WNDCLASSEXW wc{sizeof(wc)};
@@ -272,12 +314,42 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         app.service = std::make_unique<tc::service::AppService>(
             service_options, [queue](nlohmann::json const& event) { queue->push(event); });
     }
-    app.shell = std::make_unique<tc::app::WindowsHostServices>(hwnd);
+    if (native_flow) {
+        app.native_test = std::make_unique<tc::app::NativeSelfTest>(hwnd, std::filesystem::path(data_dir),
+            [&app](std::string const& message) { write_self_test_log(app, message); });
+        app.shell = std::make_unique<tc::app::WindowsHostServices>(hwnd,
+            [&app](IFileDialog* dialog) { return app.native_test->show_dialog(dialog); });
+    } else app.shell = std::make_unique<tc::app::WindowsHostServices>(hwnd);
     tc::bridge::register_app_operations(app.dispatcher, *app.service, *app.shell);
 
     if (self_test) {
         HWND const window = hwnd;
         AppState* const state = &app;
+        if (native_flow) {
+            app.dispatcher.register_operation("selfTestStep", [state](nlohmann::json const& payload) {
+                write_self_test_log(*state, "STEP " + payload.value("name", ""));
+                return state->native_test->step(payload);
+            });
+            app.dispatcher.register_operation("getSelfTestState", [state, settings_test](nlohmann::json const&) {
+                return nlohmann::json{{"checkpoint", state->native_test->checkpoint},
+                    {"rendererRecoveries", state->renderer_recoveries}, {"settingsOnly", settings_test}};
+            });
+            app.dispatcher.register_operation("crashSelfTestRenderer", [state, window](nlohmann::json const& payload) {
+                if (!state->native_test->checkpoint.is_null())
+                    throw tc::bridge::BridgeError("SELF_TEST", "Renderer recovery already requested");
+                state->native_test->checkpoint = payload;
+                write_self_test_log(*state, "STEP renderer crash");
+                PostMessageW(window, wm_self_test_crash, 0, 0);
+                return nlohmann::json::object();
+            });
+            app.dispatcher.register_operation("checkSelfTestOutput", [state](nlohmann::json const&) {
+                auto const folder = state->native_test->root() / L"output";
+                auto const first = tc::service::read_small_file(folder / L"hybrid.torrent");
+                auto const second = tc::service::read_small_file(folder / L"reopened.torrent");
+                auto const magnet = tc::service::read_small_file(folder / L"magnet.txt");
+                return nlohmann::json{{"identical", first == second}, {"magnet", magnet}};
+            });
+        }
         app.dispatcher.register_operation("checkSelfTestProfile", [path = service_options.settings_path](nlohmann::json const& payload) {
             auto const settings = tc::service::load_settings(path);
             bool const persisted = std::any_of(settings.custom_profiles.begin(), settings.custom_profiles.end(),
@@ -297,8 +369,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
 
     tc::app::WebViewHost::Options options;
     options.asset_dir = executable_dir() + L"\\frontend";
+    options.browser_executable_folder = runtime_folder;
     options.user_data_dir = data_dir.empty() ? std::wstring() : data_dir + L"\\WebView2";
-    options.start_query = self_test ? L"?selfTest=1" : L"";
+    options.start_query = native_flow ? L"?selfTest=1&nativeFlow=1" : self_test ? L"?selfTest=1" : L"";
+    options.on_renderer_recovery = [&app] {
+        ++app.renderer_recoveries;
+        write_self_test_log(app, "STEP renderer recovery " + std::to_string(app.renderer_recoveries));
+    };
     options.on_fatal = [hwnd, &app, self_test](HRESULT hr, std::wstring const& what) {
         write_self_test_log(app, "FAIL " + tc::app::to_utf8(what) + " hr=" + std::to_string(static_cast<unsigned long>(hr)));
         if (!self_test) {
