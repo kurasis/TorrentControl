@@ -76,14 +76,23 @@ HRESULT NativeSelfTest::show_dialog(IFileDialog* dialog)
     if (!armed_) throw bridge::BridgeError("SELF_TEST", "Unexpected native dialog");
     armed_ = false;
     if (!cancel_) {
+        FILEOPENDIALOGOPTIONS options{};
+        HRESULT hr = dialog->GetOptions(&options);
+        if (FAILED(hr)) return hr;
+        bool const folder_picker = (options & FOS_PICKFOLDERS) != 0;
         wil::com_ptr<IShellItem> folder;
-        auto const parent = selection_.parent_path();
-        HRESULT hr = SHCreateItemFromParsingName(parent.c_str(), nullptr, IID_PPV_ARGS(&folder));
+        // In a folder picker OK on a typed child folder navigates into it;
+        // select the current folder instead, as the real Select Folder button
+        // does after the user has navigated to their destination.
+        auto const parent = folder_picker ? selection_ : selection_.parent_path();
+        hr = SHCreateItemFromParsingName(parent.c_str(), nullptr, IID_PPV_ARGS(&folder));
         if (FAILED(hr)) return hr;
         hr = dialog->SetFolder(folder.get());
         if (FAILED(hr)) return hr;
-        hr = dialog->SetFileName(selection_.filename().c_str());
-        if (FAILED(hr)) return hr;
+        if (!folder_picker) {
+            hr = dialog->SetFileName(selection_.filename().c_str());
+            if (FAILED(hr)) return hr;
+        }
     }
     dialog_ = dialog;
     clicked_ = shown_ = ticked_ = timed_out_ = false;
