@@ -401,6 +401,19 @@ void JobScheduler::run_verify(Job& job)
     VerifyJobSpec const& spec = *job.verify;
     std::stop_token const stop = job.stop.get_token();
     std::unique_lock lock(mutex_);
+    auto finish_error = [&](JobError error) {
+        job.pause.set_listener({});
+        job.pause.resume();
+        if (error.code == "CANCELLED" || job.snap.state == JobState::Cancelling) {
+            if (job.snap.state != JobState::Cancelling && is_valid_transition(job.snap.state, JobState::Cancelling))
+                set_state(job, JobState::Cancelling, lock);
+            set_state(job, JobState::Cancelled, lock);
+        } else {
+            log(job, "Error " + error.code + ": " + error.message);
+            job.snap.error = std::move(error);
+            set_state(job, JobState::Failed, lock);
+        }
+    };
     try {
         core::Metainfo const meta = core::Metainfo::parse(spec.torrent_bytes);
         set_state(job, JobState::Hashing, lock);
@@ -448,15 +461,13 @@ void JobScheduler::run_verify(Job& job)
         }
     } catch (core::CoreError const& e) {
         if (!lock.owns_lock()) lock.lock();
-        job.pause.set_listener({});
-        if (e.code() == core::ErrorCode::Cancelled || job.snap.state == JobState::Cancelling) {
-            if (job.snap.state != JobState::Cancelling && is_valid_transition(job.snap.state, JobState::Cancelling))
-                set_state(job, JobState::Cancelling, lock);
-            set_state(job, JobState::Cancelled, lock);
-        } else {
-            job.snap.error = error_from(e);
-            set_state(job, JobState::Failed, lock);
-        }
+        finish_error(error_from(e));
+    } catch (std::exception const& e) {
+        if (!lock.owns_lock()) lock.lock();
+        finish_error(JobError{"INTERNAL", e.what(), "Verifying", "", false, std::nullopt});
+    } catch (...) {
+        if (!lock.owns_lock()) lock.lock();
+        finish_error(JobError{"INTERNAL", "Unknown verification error", "Verifying", "", false, std::nullopt});
     }
 }
 

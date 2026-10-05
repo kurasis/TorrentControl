@@ -70,4 +70,5 @@ prints `{"status": "failed", "code": ...}` and exits with 2.
 - [Engine notes and known limitations](docs/engine-notes.md)
 - [Acceptance evidence](docs/acceptance.md)
 - [M0 integration proof report](docs/m0-integration-proof.md)
+- [M2 stabilization and regression evidence](docs/m2-stabilization.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)

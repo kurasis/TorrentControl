@@ -13,7 +13,12 @@
 #include <optional>
 
 #ifndef _WIN32
+#include <cerrno>
+#include <csignal>
+#include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #endif
 
 using namespace tc::core;
@@ -195,4 +200,41 @@ TEST_CASE("the output may not be a source file or its hard-link alias", "[output
         REQUIRE(single.entries.size() == 1); // explicitly selected, so not silently excluded
         CHECK_THROWS_AS(check_output_target(root / "a.bin", single), CoreError);
     }
+}
+
+TEST_CASE("an actual partial write failure removes its temporary file", "[output][W07]")
+{
+#ifdef _WIN32
+    SKIP("RLIMIT_FSIZE fault injection is POSIX-specific");
+#else
+    tc::test::TempDir dir;
+    fs::path const out = dir.path() / "partial.torrent";
+    CommitOptions options;
+    SECTION("new output") {}
+    SECTION("replacing an existing output")
+    {
+        tc::test::write_bytes(out, other);
+        options.replace_existing = true;
+    }
+    pid_t const child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        // Isolate process-wide resource/signal changes from the test runner.
+        struct rlimit limit{};
+        if (::getrlimit(RLIMIT_FSIZE, &limit) != 0) ::_exit(10);
+        limit.rlim_cur = 16;
+        if (::setrlimit(RLIMIT_FSIZE, &limit) != 0 || std::signal(SIGXFSZ, SIG_IGN) == SIG_ERR) ::_exit(11);
+        auto const e = commit_failure(out, valid, options);
+        ::_exit(e && e->code() == ErrorCode::OutputWriteFailed && e->os_error() == EFBIG ? 0 : 12);
+    }
+    int status = 0;
+    pid_t waited;
+    do { waited = ::waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
+    REQUIRE(waited == child);
+    REQUIRE(WIFEXITED(status));
+    REQUIRE(WEXITSTATUS(status) == 0);
+    CHECK(temp_files(dir.path()) == 0);
+    if (options.replace_existing) CHECK(tc::test::read_all(out) == other);
+    else CHECK_FALSE(fs::exists(out));
+#endif
 }

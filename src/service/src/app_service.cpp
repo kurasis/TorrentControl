@@ -403,10 +403,48 @@ json AppService::summary_locked() const
     return s;
 }
 
+json AppService::creation_settings_issues_locked() const
+{
+    json issues = json::array();
+    // Private torrents (section 10.4).
+    auto const tiers = tracker_tiers(draft_.trackers);
+    std::set<std::string> const preset(builtin_tracker_catalog().urls.begin(), builtin_tracker_catalog().urls.end());
+    if (draft_.private_flag) {
+        if (tiers.empty())
+            issues.push_back(issue("PRIVATE_WITHOUT_TRACKER", "error", "A private torrent needs at least one tracker you are authorized to use"));
+        for (auto const& t : draft_.trackers)
+            if (t.enabled && preset.contains(t.url))
+                issues.push_back(issue("PRIVATE_PUBLIC_TRACKER", "error",
+                    "Public preset tracker in a private torrent: " + t.url + ". Remove it or turn off Private."));
+        if (!draft_.dht_nodes.empty())
+            issues.push_back(issue("PRIVATE_DHT_NODES", "warning", "DHT nodes are left out of private torrents"));
+        auto const p = find_profile_locked(draft_.profile_id);
+        if (!draft_.web_seeds.empty() && p && !p->allow_web_seeds)
+            issues.push_back(issue("PRIVATE_WEB_SEEDS", "error",
+                "The selected profile does not allow web seeds; remove them or use a profile that allows them"));
+    }
+    std::set<std::string> seen;
+    for (auto const& t : draft_.trackers) {
+        if (!t.enabled || t.url.empty()) continue;
+        if (!supported_tracker_scheme(t.url))
+            issues.push_back(issue("TRACKER_UNSUPPORTED_SCHEME", "warning",
+                "Kept as written but not checkable: " + redact_url(t.url)));
+        if (!seen.insert(t.url).second)
+            issues.push_back(issue("TRACKER_DUPLICATE", "warning", "Listed more than once: " + redact_url(t.url)));
+    }
+
+    return issues;
+}
+
 json AppService::validate_draft() const
 {
     std::lock_guard lock(mutex_);
-    json issues = json::array();
+    return validate_draft_locked();
+}
+
+json AppService::validate_draft_locked() const
+{
+    json issues = creation_settings_issues_locked();
 
     if (draft_.sources.empty()) issues.push_back(issue("NO_SOURCES", "error", "Add files or folders to share"));
     if (scan_->state == "scanning") issues.push_back(issue("SCAN_PENDING", "error", "The sources are still being scanned"));
@@ -433,33 +471,6 @@ json AppService::validate_draft() const
                     issues.push_back(issue(std::string(core::to_string(e.code())), "error", e.what(), e.source_id()));
             }
         }
-    }
-
-    // Private torrents (section 10.4).
-    auto const tiers = tracker_tiers(draft_.trackers);
-    std::set<std::string> const preset(builtin_tracker_catalog().urls.begin(), builtin_tracker_catalog().urls.end());
-    if (draft_.private_flag) {
-        if (tiers.empty())
-            issues.push_back(issue("PRIVATE_WITHOUT_TRACKER", "error", "A private torrent needs at least one tracker you are authorized to use"));
-        for (auto const& t : draft_.trackers)
-            if (t.enabled && preset.contains(t.url))
-                issues.push_back(issue("PRIVATE_PUBLIC_TRACKER", "error",
-                    "Public preset tracker in a private torrent: " + t.url + ". Remove it or turn off Private."));
-        if (!draft_.dht_nodes.empty())
-            issues.push_back(issue("PRIVATE_DHT_NODES", "warning", "DHT nodes are left out of private torrents"));
-        auto const p = find_profile_locked(draft_.profile_id);
-        if (!draft_.web_seeds.empty() && p && !p->allow_web_seeds)
-            issues.push_back(issue("PRIVATE_WEB_SEEDS", "error",
-                "The selected profile does not allow web seeds; remove them or use a profile that allows them"));
-    }
-    std::set<std::string> seen;
-    for (auto const& t : draft_.trackers) {
-        if (!t.enabled || t.url.empty()) continue;
-        if (!supported_tracker_scheme(t.url))
-            issues.push_back(issue("TRACKER_UNSUPPORTED_SCHEME", "warning",
-                "Kept as written but not checkable: " + redact_url(t.url)));
-        if (!seen.insert(t.url).second)
-            issues.push_back(issue("TRACKER_DUPLICATE", "warning", "Listed more than once: " + redact_url(t.url)));
     }
 
     // Output (section 14.1).
@@ -489,7 +500,7 @@ json AppService::validate_draft() const
     add("format", std::string(core::to_string(draft_.format)));
     if (draft_.piece_length != 0) add("pieceLength", draft_.piece_length);
     if (draft_.private_flag) add("private", true);
-    add("trackerTiers", tiers.size());
+    add("trackerTiers", tracker_tiers(draft_.trackers).size());
     if (!draft_.web_seeds.empty()) add("webSeeds", draft_.web_seeds.size());
     if (!draft_.dht_nodes.empty() && !draft_.private_flag) add("dhtNodes", draft_.dht_nodes.size());
     if (!draft_.comment.empty()) add("comment", draft_.comment);
@@ -510,14 +521,12 @@ json AppService::validate_draft() const
 
 std::string AppService::start_create()
 {
-    json const v = validate_draft();
-    if (!v["canCreate"].get<bool>()) {
-        for (auto const& i : v["issues"])
-            if (i["severity"] == "error") throw ServiceError("VALIDATION_FAILED", i["message"].get<std::string>());
-    }
     CreateJobSpec spec;
     {
         std::lock_guard lock(mutex_);
+        json const v = validate_draft_locked();
+        for (auto const& i : v["issues"])
+            if (i["severity"] == "error") throw ServiceError("VALIDATION_FAILED", i["message"].get<std::string>());
         if (!scan_->manifest) throw ServiceError("VALIDATION_FAILED", "The sources are not scanned yet");
         spec.name = scan_->manifest->name;
         spec.manifest = *scan_->manifest;
@@ -613,6 +622,10 @@ std::vector<std::string> AppService::start_batch()
     {
         std::lock_guard lock(mutex_);
         if (!batch_) throw ServiceError("NOT_FOUND", "No batch is planned");
+        // Check the same settings as single creation under the snapshot lock.
+        // Manifest/output validation remains per item in the worker.
+        for (auto const& i : creation_settings_issues_locked())
+            if (i["severity"] == "error") throw ServiceError("VALIDATION_FAILED", i["message"].get<std::string>());
         std::string const batch_id = "batch-" + std::to_string(next_batch_++);
         // The profile and settings are snapshotted now (section 4.3).
         core::CreateOptions const options = create_options(draft_, options_.now());

@@ -14,7 +14,8 @@ test.describe("startup", () => {
     await page.addInitScript({ content: "window.__mockConfig = { selfTest: true };" });
     await page.goto("/index.html?selfTest=1");
     await expect.poll(() => page.evaluate(() => window.__mock.requests.find((r) => r.operation === "reportSelfTest")?.payload))
-      .toMatchObject({ ok: true, engineVersion: "libtorrent 2.1.2", profiles: 2 });
+      .toMatchObject({ ok: true, engineVersion: "libtorrent 2.1.2", profiles: 2,
+        profileDialog: true, profilePersisted: true, magnetDialog: true });
   });
 });
 
@@ -126,3 +127,107 @@ for (const scale of [1, 1.5, 2]) {
     });
   });
 }
+
+test.describe("M2 profile and clipboard dialogs", () => {
+  test.use({ mockConfig: 'window.prompt = () => { throw new Error("Script prompts are disabled by the host"); };' });
+
+  async function openProfile(page) {
+    await page.goto("/index.html");
+    await page.locator('#mode-switch [data-mode="advanced"]').click();
+    await page.locator("#tab-general").click();
+    await page.locator("#save-profile").click();
+    await expect(page.locator("#profile-name")).toBeFocused();
+  }
+
+  test("keyboard saves a Unicode profile and flushes pending draft edits", async ({ page }) => {
+    await page.goto("/index.html");
+    await page.locator('#mode-switch [data-mode="advanced"]').click();
+    await page.locator("#tab-general").click();
+    await page.locator("#draft-name").fill("Pending title");
+    await page.locator("#save-profile").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#profile-name")).toBeFocused();
+    await page.keyboard.type("  Мой профиль  ");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#dialog")).not.toHaveAttribute("open", "");
+    await expect(page.locator("#draft-profile option:checked")).toHaveText("Мой профиль");
+    const calls = await page.evaluate(() => window.__mock.requests);
+    const index = calls.findIndex((r) => r.operation === "saveProfile");
+    expect(calls[index].payload.name).toBe("Мой профиль");
+    expect(calls.slice(0, index).some((r) => r.operation === "updateDraft" && r.payload.patch.name === "Pending title")).toBe(true);
+  });
+
+  test("Escape cancels without saving and the dialog can be reopened", async ({ page }) => {
+    await openProfile(page);
+    await page.locator("#profile-name").fill("Cancelled");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#dialog")).not.toHaveAttribute("open", "");
+    expect(await page.evaluate(() => window.__mock.requests.filter((r) => r.operation === "saveProfile"))).toHaveLength(0);
+    await page.locator("#save-profile").click();
+    await expect(page.locator("#profile-name")).toBeFocused();
+    await page.locator("#profile-name-cancel").click();
+  });
+
+  test("blank and oversized UTF-8 names cannot be submitted", async ({ page }) => {
+    await openProfile(page);
+    for (const name of ["   ", "Я".repeat(101)]) {
+      await page.locator("#profile-name").fill(name);
+      await page.locator("#profile-name-save").click();
+      expect(await page.locator("#profile-name").evaluate((input) => input.validity.valid)).toBe(false);
+      expect(await page.evaluate(() => window.__mock.requests.filter((r) => r.operation === "saveProfile"))).toHaveLength(0);
+    }
+    await page.locator("#profile-name").fill("Valid");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#draft-profile option:checked")).toHaveText("Valid");
+  });
+
+  test("native errors keep the name and allow retry", async ({ page }) => {
+    await openProfile(page);
+    await page.evaluate(() => {
+      const save = window.__mock.ops.saveProfile;
+      let first = true;
+      window.__mock.ops.saveProfile = (p) => {
+        if (first) { first = false; throw new Error("Cannot save profile"); }
+        return save(p);
+      };
+    });
+    await page.locator("#profile-name").fill("Retry profile");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#profile-save-error")).toContainText("Cannot save profile");
+    await expect(page.locator("#profile-name")).toHaveValue("Retry profile");
+    await expect(page.locator("#profile-name")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#draft-profile option:checked")).toHaveText("Retry profile");
+  });
+
+  test("clipboard denial opens a selected read-only magnet without a script prompt", async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: async () => { throw new Error("Permission denied"); } }, configurable: true,
+    }));
+    await page.goto("/index.html");
+    await page.locator("#add-folder").click();
+    await page.locator("#btn-create").click();
+    await page.evaluate(() => window.__mock.emit("job", { job: {
+      id: "job-1", state: "Succeeded", version: "2", name: "Holiday photos", kind: "create",
+      result: { name: "Holiday photos", output: "C:\\out.torrent", format: "v1", payloadBytes: "1",
+        realFiles: 1, pieceLength: 16384, numPieces: 1, infohashV1: "0123456789012345678901234567890123456789", layout: [] },
+    } }));
+    await page.locator("#result-copy-magnet").click();
+    const text = page.locator("#magnet-copy-text");
+    await expect(text).toBeFocused();
+    await expect(text).toHaveAttribute("readonly", "");
+    await expect(text).toHaveValue(/magnet:\?xt=urn:btih:/);
+    expect(await text.evaluate((input) => input.value.slice(input.selectionStart, input.selectionEnd))).toBe(await text.inputValue());
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#dialog")).not.toHaveAttribute("open", "");
+  });
+});
+
+test.describe("self-test persistence failure", () => {
+  test.use({ mockConfig: "window.__mockConfig = { selfTestPersistence: false };" });
+  test("reports failure when native profile persistence is not confirmed", async ({ page }) => {
+    await page.goto("/index.html?selfTest=1");
+    await expect.poll(() => page.evaluate(() => window.__mock.requests.find((r) => r.operation === "reportSelfTest")?.payload))
+      .toMatchObject({ ok: false });
+  });
+});

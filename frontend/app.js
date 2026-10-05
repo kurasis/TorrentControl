@@ -5,7 +5,7 @@ import { applyTranslations, setLocale, t } from "./i18n.js";
 import { isAvailable, onEvent, request, requestWithFiles } from "./bridge.js";
 import { debounce, toast } from "./dom.js";
 import { renderWorkspace, renderReview, renderJobs, workspaceKey } from "./views.js";
-import { showResult, showProfileChange, showBatch, showConfirm, closeDialog } from "./dialogs.js";
+import { showResult, showProfileChange, showBatch, showConfirm, showSaveProfile, showMagnetCopy, closeDialog } from "./dialogs.js";
 
 export const state = {
   draft: null,
@@ -196,13 +196,12 @@ export const actions = {
     if (r?.draft) applyDraft(r.draft);
   },
   async saveProfile() {
-    const name = window.prompt(t("profileNamePrompt"), "");
-    if (!name) return;
-    const r = await guarded(request("saveProfile", { name }));
-    if (r) {
+    await sendPatch();
+    showSaveProfile(async (name) => {
+      const r = await request("saveProfile", { name });
       state.profiles = r.profiles;
       applyDraft(r.draft);
-    }
+    });
   },
   async deleteProfile(profileId) {
     const r = await guarded(request("deleteProfile", { profileId }));
@@ -267,7 +266,7 @@ export const actions = {
       await navigator.clipboard.writeText(r.magnet);
       toast(t("copied"));
     } catch {
-      window.prompt(t("copyMagnet"), r.magnet);
+      showMagnetCopy(r.magnet);
     }
   },
   saveMagnet: (id) => guarded(request("saveMagnet", { id })),
@@ -449,12 +448,8 @@ async function start() {
     const info = await request("getEngineInfo");
     await refresh();
     if (selfTest) {
-      await request("reportSelfTest", {
-        ok: true,
-        engineVersion: info.engineVersion,
-        appVersion: info.appVersion,
-        profiles: state.profiles.length,
-      });
+      const { runSelfTest } = await import("./self-test.js");
+      await request("reportSelfTest", { ok: true, ...await runSelfTest(actions, state, info) });
     }
   } catch (err) {
     $("unavailable").hidden = false;

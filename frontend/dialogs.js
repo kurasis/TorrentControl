@@ -10,7 +10,8 @@ let onClose = null;
 function open(title, body, buttons, { wide = false, closed } = {}) {
   const d = dialog();
   if (d.open) {
-    // The close event is queued, so detach it first: it would clear the new content.
+    // Resolve the previous owner immediately. Its queued close event is
+    // ignored by handleClose while a replacement dialog is open.
     d.removeEventListener("close", handleClose);
     const previous = onClose;
     onClose = null;
@@ -24,7 +25,7 @@ function open(title, body, buttons, { wide = false, closed } = {}) {
     h("h2", { id: "dialog-title" }, title),
     h("div", { class: "dialog-body" }, body),
     h("div", { class: "button-row end dialog-buttons" }, buttons));
-  d.addEventListener("close", handleClose, { once: true });
+  d.addEventListener("close", handleClose);
   d.showModal();
   // Focus the first control after the title, or the default button.
   (d.querySelector("[autofocus]") ?? d.querySelector(".dialog-body button, .dialog-body input, .dialog-body select") ??
@@ -32,9 +33,12 @@ function open(title, body, buttons, { wide = false, closed } = {}) {
 }
 
 function handleClose() {
+  const d = dialog();
+  if (d.open) return;
+  d.removeEventListener("close", handleClose);
   const callback = onClose;
   onClose = null;
-  replace(dialog());
+  replace(d);
   callback?.();
 }
 
@@ -60,6 +64,55 @@ export function showConfirm(title, message = "") {
       }, { id: "confirm-yes", class: "primary", autofocus: true }),
     ], { closed: () => resolve(answer) });
   });
+}
+
+// HTML dialogs work even when the native host disables script prompts.
+export function showSaveProfile(save) {
+  let busy = false;
+  let closed = false;
+  const d = dialog();
+  const preventCancel = (event) => { if (busy) event.preventDefault(); };
+  const error = h("p", { id: "profile-save-error", role: "alert", class: "error", hidden: true });
+  const input = h("input", { id: "profile-name", type: "text", required: true, maxlength: 200, autofocus: true,
+    oninput: () => input.setCustomValidity("") });
+  const cancel = button(t("close"), () => closeDialog(), { id: "profile-name-cancel" });
+  const submit = button(t("saveProfile"), null, { id: "profile-name-save", type: "submit", form: "profile-name-form", class: "primary" });
+  const form = h("form", { id: "profile-name-form", onsubmit: async (event) => {
+    event.preventDefault();
+    if (busy) return;
+    const name = input.value.trim();
+    input.setCustomValidity(!name ? t("profileNameRequired")
+      : new TextEncoder().encode(name).length > 200 ? t("profileNameTooLong") : "");
+    if (!input.reportValidity()) return;
+    busy = true;
+    input.disabled = cancel.disabled = submit.disabled = true;
+    error.hidden = true;
+    try {
+      await save(name);
+      if (!closed) closeDialog();
+    } catch (err) {
+      error.textContent = `${t("errorPrefix")}: ${err.message}`;
+      error.hidden = false;
+    } finally {
+      busy = false;
+      input.disabled = cancel.disabled = submit.disabled = false;
+      if (!closed && !error.hidden) input.focus();
+    }
+  } }, h("div", { class: "field" }, h("label", { for: "profile-name" }, t("profileNamePrompt")), input), error);
+  open(t("saveAsProfile"), form, [cancel, submit], { closed: () => {
+    closed = true;
+    d.removeEventListener("cancel", preventCancel);
+  } });
+  d.addEventListener("cancel", preventCancel);
+}
+
+export function showMagnetCopy(magnet) {
+  const input = h("textarea", { id: "magnet-copy-text", readonly: true, rows: 5,
+    "aria-label": t("copyMagnet"), autofocus: true });
+  input.value = magnet;
+  open(t("copyMagnet"), [h("p", {}, t("copyMagnetManual")), input],
+    [button(t("close"), () => closeDialog(), { id: "magnet-copy-close" })]);
+  input.select();
 }
 
 // ---- Result -------------------------------------------------------------------------

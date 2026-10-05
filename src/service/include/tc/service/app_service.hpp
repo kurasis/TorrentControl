@@ -127,6 +127,8 @@ private:
     std::optional<Profile> find_profile_locked(std::string const& id) const;
     nlohmann::json draft_json_locked() const;
     nlohmann::json summary_locked() const;
+    nlohmann::json creation_settings_issues_locked() const;
+    nlohmann::json validate_draft_locked() const;
     void emit(nlohmann::json event);
     void save_settings_locked() const;
 

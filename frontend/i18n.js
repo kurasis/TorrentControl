@@ -92,6 +92,10 @@ const strings = {
     acceptResources: "Accept the estimated memory use",
     saveAsProfile: "Save as profile…",
     profileNamePrompt: "Profile name",
+    saveProfile: "Save profile",
+    profileNameRequired: "Enter a profile name",
+    profileNameTooLong: "The profile name is too long. Use a shorter name.",
+    copyMagnetManual: "Automatic copying is unavailable. Press Ctrl+C to copy the selected magnet link.",
     deleteProfile: "Delete profile",
     exportProfile: "Export profile…",
 
@@ -301,6 +305,10 @@ const strings = {
     acceptResources: "Принять оценку расхода памяти",
     saveAsProfile: "Сохранить как профиль…",
     profileNamePrompt: "Имя профиля",
+    saveProfile: "Сохранить профиль",
+    profileNameRequired: "Введите имя профиля",
+    profileNameTooLong: "Имя профиля слишком длинное. Сократите его.",
+    copyMagnetManual: "Автоматическое копирование недоступно. Нажмите Ctrl+C, чтобы скопировать выделенную magnet-ссылку.",
     deleteProfile: "Удалить профиль",
     exportProfile: "Экспорт профиля…",
 
