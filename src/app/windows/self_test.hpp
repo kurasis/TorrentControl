@@ -30,6 +30,7 @@ private:
     bool clicked_ = false;
     bool shown_ = false;
     bool ticked_ = false;
+    bool timed_out_ = false;
     IFileDialog* dialog_ = nullptr;
     ULONGLONG deadline_ = 0;
 };

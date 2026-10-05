@@ -57,11 +57,15 @@ export async function runNativeFlow(actions, state, info) {
   await request("selfTestStep", { name: "cancel" });
   check((await request("selectSources", { kind: "files" })).cancelled, "Dialog cancel did not reach the bridge");
   check((await request("getSnapshot")).draft.revision === revision, "Cancel mutated the draft");
-  await dialog("file", "selectSources", { kind: "files" });
+  await request("selfTestStep", { name: "file" });
+  await actions.selectSources("files");
+  check(state.draft.sources[0]?.name === "данные #1.bin", "The frontend did not apply the selected file");
   let snapshot = await request("getSnapshot");
   check(snapshot.draft.sources.length === 1 && snapshot.draft.sources[0].name === "данные #1.bin", "Unicode file selection failed");
   await actions.newDraft();
-  await dialog("folder", "selectSources", { kind: "folder" });
+  await request("selfTestStep", { name: "folder" });
+  await actions.selectSources("folder");
+  check(state.draft.sources[0]?.name === "набор данных", "The frontend did not apply the selected folder");
   await scan();
   check((await request("getManifestPage")).total === 2, "Folder selection did not scan both files");
   await request("updateDraft", { patch: { trackers: [], creationDate: "omit" } });

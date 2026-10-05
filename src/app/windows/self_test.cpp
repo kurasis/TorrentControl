@@ -42,19 +42,27 @@ nlohmann::json NativeSelfTest::step(nlohmann::json const& payload)
 void NativeSelfTest::on_timer()
 {
     if (!dialog_) return;
+    if (timed_out_) return;
     if (!ticked_) { ticked_ = true; log_("DIALOG timer dispatched"); }
-    if (GetTickCount64() >= deadline_) {
-        log_("DIALOG timeout");
-        dialog_->Close(HRESULT_FROM_WIN32(ERROR_TIMEOUT));
-        return;
-    }
     auto window = wil::com_ptr<IFileDialog>(dialog_).try_query<IOleWindow>();
     HWND dialog_window = nullptr;
-    if (!window || FAILED(window->GetWindow(&dialog_window)) || !IsWindowVisible(dialog_window)) return;
+    bool const visible = window && SUCCEEDED(window->GetWindow(&dialog_window)) && IsWindowVisible(dialog_window);
+    if (GetTickCount64() >= deadline_) {
+        timed_out_ = true;
+        KillTimer(owner_, timer_id);
+        log_("DIALOG timeout");
+        // Close() is synchronous and can reenter the shell's modal pump.
+        // Post a real window close instead; do not keep retrying recursively.
+        PostMessageW(visible ? dialog_window : owner_, WM_CLOSE, 0, 0);
+        return;
+    }
+    if (!visible) return;
     if (!shown_) log_("DIALOG visible");
     shown_ = true;
-    if (cancel_) {
-        dialog_->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+    if (cancel_ && !clicked_) {
+        clicked_ = true;
+        log_("DIALOG cancel posted");
+        PostMessageW(dialog_window, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
     } else if (!clicked_) {
         clicked_ = true;
         // Let the dialog validate the filename and populate its real result.
@@ -78,7 +86,7 @@ HRESULT NativeSelfTest::show_dialog(IFileDialog* dialog)
         if (FAILED(hr)) return hr;
     }
     dialog_ = dialog;
-    clicked_ = shown_ = ticked_ = false;
+    clicked_ = shown_ = ticked_ = timed_out_ = false;
     deadline_ = GetTickCount64() + 15'000;
     // Common item dialogs run their own message pump. Handle WM_TIMER in the
     // owner's window procedure rather than depending on TIMERPROC dispatch.
@@ -92,6 +100,7 @@ HRESULT NativeSelfTest::show_dialog(IFileDialog* dialog)
     KillTimer(owner_, timer_id);
     log_("DIALOG result " + std::to_string(static_cast<unsigned long>(hr)));
     dialog_ = nullptr;
+    if (timed_out_) throw bridge::BridgeError("SELF_TEST", "The native dialog did not finish within 15 seconds");
     if (!shown_) throw bridge::BridgeError("SELF_TEST", "The common item dialog was not shown");
     if (SUCCEEDED(hr) && !cancel_) {
         wil::com_ptr<IShellItem> item;
