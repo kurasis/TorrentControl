@@ -141,7 +141,7 @@ page mirrors it and can always be rebuilt from `getSnapshot`.
 
 ### Events and threading
 
-Service events (`job`, `scan`) are raised on worker threads. The host queues
+Service events (`job`, `scan`, `diagnostics`) are raised on worker threads. The host queues
 them, wakes the UI thread with a window message, coalesces progress updates
 of the same job to the newest, and sends each as
 `{"protocolVersion":1,"event":type,"sequence":"N","payload":{...}}`.
@@ -153,3 +153,17 @@ because handlers may open modal dialogs. Paths for privileged operations
 never come from the page: files are chosen in native dialogs, dropped files
 are read from the `ICoreWebView2File` objects WebView2 attaches to the
 message, and later commands refer to native-owned IDs.
+
+## Explicit network diagnostics (M3)
+
+`AppService` derives targets from the draft or an opened native torrent ID.
+`DiagnosticsService` owns four workers, cancellation, eight run summaries,
+50-row result pages and a ten-minute observation cache. Events carry summaries;
+snapshots restore results without replaying requests. Run sequence and completed
+counts prevent stale updates from replacing newer observations.
+
+libcurl supplies HTTP, bounded bodies, certificate verification and asynchronous
+DNS; c-ares supplies cancellable UDP DNS. The connection policy is explicit,
+including disabling environment proxies. HTTP proxies do not enable UDP or a
+direct fallback. Tracker checks never announce the actual torrent or register
+a peer. See [protocol and resource limits](m3-network-diagnostics.md).

@@ -100,6 +100,19 @@ bool complete(json const& j)
     return true;
 }
 
+service::NetworkPolicy network_policy(json const& p)
+{
+    service::NetworkPolicy policy;
+    policy.http_proxy = str(p, "httpProxy", 8192, false);
+    auto mode = str(p, "networkMode", 16, false);
+    if (mode.empty()) mode = "direct";
+    if ((mode != "direct" && mode != "http-proxy") || (mode == "http-proxy" && policy.http_proxy.empty())
+        || (mode == "direct" && !policy.http_proxy.empty())) throw BridgeError("INVALID_PROXY", "Select direct or provide an explicit HTTP proxy");
+    policy.refresh = flag(p, "refresh");
+    policy.udp_retry = flag(p, "udpRetry");
+    return policy;
+}
+
 } // namespace
 
 void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
@@ -109,6 +122,26 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
     using SK = HostServices::SaveKind;
 
     d.register_operation("getSnapshot", [&app](json const&) { return app.snapshot(); });
+    d.register_operation("getDiagnosticTargets", [&app](json const& p) {
+        return app.diagnostic_targets(str(p, "kind", 16), str(p, "torrentId", 64, false));
+    });
+    d.register_operation("startDiagnostics", [&app](json const& p) {
+        return json{{"runId",app.start_diagnostics(str(p, "kind", 16), str(p, "torrentId", 64, false), network_policy(p))}};
+    });
+    d.register_operation("cancelDiagnostics", [&app](json const& p) {
+        app.diagnostics().cancel(str(p, "runId", 64)); return json::object();
+    });
+    d.register_operation("getDiagnosticPage", [&app](json const& p) {
+        return app.diagnostics().page(str(p, "runId", 64), count(p, "offset", 0, 256), count(p, "limit", 50, 50));
+    });
+    d.register_operation("getTrackerCatalog", [&app](json const&) { return app.diagnostics().catalog(); });
+    d.register_operation("updateTrackerCatalog", [&app](json const& p) {
+        return json{{"runId", app.update_tracker_catalog(network_policy(p))}};
+    });
+    d.register_operation("planCatalogApply", [&app](json const&) { return app.plan_catalog_apply(); });
+    d.register_request_operation("applyTrackerCatalog", [&app](R r) {
+        return json{{"draft", app.apply_catalog(str(r.payload, "checksum", 64), r.draft_revision)}};
+    });
 
     // ---- Sources ----------------------------------------------------------
     d.register_operation("selectSources", [&app, &host](json const& p) {

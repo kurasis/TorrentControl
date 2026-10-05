@@ -23,8 +23,9 @@ workaround is implemented.
 - Pausing a job stops reading after the buffers already in flight are
   hashed. Source files stay open while paused, so they cannot be deleted or
   renamed on Windows until the job resumes or is cancelled.
-- Tracker and web-seed rows show "Unchecked"; network checks arrive with
-  diagnostics in M3.
+- Tracker and web-seed URLs remain unchecked until an explicit diagnostic run.
+  Observations have timestamps and separate IPv4/IPv6 results; sampled Range
+  checks establish transport behavior, not payload integrity.
 - Consistency checks are best effort, not a snapshot (see
   [architecture](architecture.md#source-consistency)).
 - On file systems without hard links, a non-replacing POSIX commit falls back
@@ -36,8 +37,11 @@ workaround is implemented.
 - Case folding outside Windows uses a built-in table for Latin, Greek,
   Cyrillic, Armenian and fullwidth letters. Windows uses the invariant locale.
 - The M3 editor supports typed non-layout extensions and BEP 17 `httpseeds`;
-  signing, alias repair, layout rebuilding and network diagnostics remain
+  signing, alias repair and layout rebuilding remain
   separate workflows. See [metadata editor](m3-metadata-editor.md).
+- BEP 17 is transport-only, unsupported for ordinary pure-v2 editing. Imported
+  unsupported values are preserved. UDP uses connect only; optional UDP scrape
+  and SOCKS/UDP proxy support are not implemented. See [diagnostics](m3-network-diagnostics.md).
 - Pure v2 single-file torrents and a folder containing one file with the same
   name as the torrent have the same `file tree` shape; the reference verifier
   treats a single top-level file named `name` as single-file mode.

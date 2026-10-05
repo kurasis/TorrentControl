@@ -10,7 +10,9 @@ $evidence = (Resolve-Path $EvidenceDirectory).Path
 $data = Join-Path $evidence ("data-" + [guid]::NewGuid().ToString("N"))
 
 function Invoke-SelfTest([string]$switch, [string]$log, [int]$expectedExit = 0) {
-    $p = Start-Process -FilePath $exe -ArgumentList $switch, "`"$log`"", "--self-test-data", "`"$data`"" -PassThru
+    $arguments = @($switch, "`"$log`"", "--self-test-data", "`"$data`"")
+    if ($switch -eq "--self-test-flow") { $arguments += @("--self-test-diagnostics-port", "$diagnosticsPort") }
+    $p = Start-Process -FilePath $exe -ArgumentList $arguments -PassThru
     if (-not $p.WaitForExit(180000)) {
         $p.Kill($true)
         throw "$switch did not finish within 180 seconds"
@@ -27,7 +29,20 @@ function Invoke-SelfTest([string]$switch, [string]$log, [int]$expectedExit = 0) 
     }
 }
 
-Invoke-SelfTest "--self-test-flow" (Join-Path $evidence "flow.log")
+$portFile = Join-Path $evidence "fixture-port.txt"
+Remove-Item $portFile -ErrorAction SilentlyContinue
+$fixture = Start-Process -FilePath "python" -ArgumentList "tests/windows/network_fixture.py", "--port-file", "`"$portFile`"", "--root", "`"$data`"" -PassThru
+try {
+    $deadline = [DateTime]::UtcNow.AddSeconds(15)
+    while (-not (Test-Path $portFile)) {
+        if ($fixture.HasExited -or [DateTime]::UtcNow -ge $deadline) { throw "Loopback diagnostics fixture did not start" }
+        Start-Sleep -Milliseconds 50
+    }
+    $diagnosticsPort = [int](Get-Content $portFile)
+    Invoke-SelfTest "--self-test-flow" (Join-Path $evidence "flow.log")
+} finally {
+    if (-not $fixture.HasExited) { $fixture.Kill($true); $fixture.WaitForExit() }
+}
 Invoke-SelfTest "--self-test-settings" (Join-Path $evidence "restart.log")
 
 # Independently hash the payload selected by the Windows dialogs. This checks

@@ -8,6 +8,7 @@ add_executable(tc_unit_tests
     unit/bencode_tests.cpp
     unit/bridge_tests.cpp
     unit/consistency_tests.cpp
+    unit/diagnostics_tests.cpp
     unit/engine_tests.cpp
     unit/field_registry_tests.cpp
     unit/manifest_policy_tests.cpp
@@ -37,4 +38,13 @@ if(TC_BUILD_TOOLS)
     set_tests_properties(integration_proof PROPERTIES
         ENVIRONMENT "TC_PROOF=$<TARGET_FILE:tc-proof>;TC_VERIFIER=${PROJECT_SOURCE_DIR}/tools/reference/verify_torrent.py"
         TIMEOUT 600)
+endif()
+
+if(TC_BUILD_TOOLS)
+    add_test(NAME network_diagnostics_proof
+        COMMAND ${Python3_EXECUTABLE} -m unittest -v test_network
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/integration)
+    set_tests_properties(network_diagnostics_proof PROPERTIES
+        ENVIRONMENT "TC_NETWORK_PROOF=$<TARGET_FILE:tc-network-proof>"
+        TIMEOUT 120)
 endif()

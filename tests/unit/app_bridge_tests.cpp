@@ -340,3 +340,16 @@ TEST_CASE("binary imported comments stay in the native model instead of breaking
     CHECK(field["value"]["t"] == "bytes");
     CHECK(field["value"]["hex"] == "ff00");
 }
+
+TEST_CASE("diagnostics bridge requires native targets and an explicit valid connection policy", "[bridge][diagnostics][N05]")
+{
+    Bridge b;
+    b.ok("updateDraft", {{"patch",{{"trackers",json::array()}}}}, "1");
+    CHECK(b.ok("getDiagnosticTargets", {{"kind","trackers"}})["targets"].empty());
+    CHECK(b.call("startDiagnostics", {{"kind","trackers"},{"url","http://page-chosen.invalid/announce"}})["error"]["code"] == "INVALID_ARGUMENT");
+    CHECK(b.call("startDiagnostics", {{"kind","trackers"},{"torrentId","page-owned-id"}})["error"]["code"] == "NOT_FOUND");
+    CHECK(b.call("startDiagnostics", {{"kind","trackers"},{"networkMode","http-proxy"}})["error"]["code"] == "INVALID_PROXY");
+    CHECK(b.call("startDiagnostics", {{"kind","trackers"},{"networkMode","direct"},{"httpProxy","http://127.0.0.1:1"}})["error"]["code"] == "INVALID_PROXY");
+    CHECK(b.call("getDiagnosticPage", {{"runId","not-native"},{"offset",0},{"limit",51}})["ok"] == false);
+    CHECK(b.app->snapshot()["diagnostics"].empty());
+}

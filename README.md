@@ -6,12 +6,13 @@ files and file collections, lossless metadata editing, and tracker/web-seed
 diagnostics. Built with C++20, [libtorrent](https://libtorrent.org) 2.1.2, and
 Microsoft Edge WebView2.
 
-> **Status:** M2 complete, M3 metadata editor implemented. On top of the M1 core, the
+> **Status:** M2 complete, M3 metadata editor and network diagnostics implemented. On top of the M1 core, the
 > app has simple and advanced modes, a job queue with pause, resume and
 > cancel, profiles with a change preview and undo, projects, and batch
 > creation. The [M3 editor](docs/m3-metadata-editor.md) adds a native field registry,
-> binary-safe metadata forms, identity preview and safe Save As. Tracker and
-> web-seed diagnostics remain the next stage. Development builds are unsigned.
+> binary-safe metadata forms, identity preview and safe Save As. Explicit
+> [network checks](docs/m3-network-diagnostics.md) cover trackers and sampled web seeds.
+> Performance and independent client compatibility are the next stage. Development builds are unsigned.
 
 ## Repository layout
 

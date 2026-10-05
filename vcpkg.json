@@ -9,6 +9,15 @@
       "name": "libtorrent",
       "default-features": false
     },
+    {
+      "name": "curl",
+      "default-features": false,
+      "features": [
+        "ssl",
+        "c-ares"
+      ]
+    },
+    "c-ares",
     "nlohmann-json",
     "catch2",
     {
