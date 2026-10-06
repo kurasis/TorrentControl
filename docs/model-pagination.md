@@ -40,6 +40,12 @@ an error and retry the failed read; they do not replay a mutation.
 
 `editDraftRow` modifies one tracker, seed or exclusion pattern, preserving all
 unloaded rows. Draft mutations use the revision of the rendered controls.
+Scan and validation redraws defer workspace replacement while a paged text or
+numeric row has focus, including before its first input event. A replacement
+pager loads rows asynchronously and cannot immediately restore that focus.
+Blur commits any edit and requests the deferred redraw. A browser regression
+focuses an unchanged last exclusion row, delivers a real scan event, then
+checks focus and commits an edit without losing unseen patterns.
 Batch updates carry the batch revision and update one item's native override;
 earlier exclusions survive changes on other pages. Starting a batch returns
 its ID, total and only the first job-ID page. The UI obtains aggregate completion

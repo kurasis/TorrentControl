@@ -58,10 +58,11 @@ function flush() {
   frame = 0;
   if (dirty.workspace) {
     const key = workspaceKey(state);
-    // Native scan/validation events must not detach a row before its blur
-    // commits the typed value. Keep the old render key; blur invalidates again.
+    // A replacement pager loads its rows asynchronously, so restoring focus
+    // after rebuilding cannot find even a clean focused row. Defer until blur,
+    // including the interval before the first input event; blur invalidates again.
     const active = document.activeElement;
-    const editingRow = active?.dataset.rowDirty === "true" && $("workspace").contains(active);
+    const editingRow = active?.dataset.rowEditor === "true" && $("workspace").contains(active);
     if (key !== lastWorkspaceKey && !editingRow) {
       lastWorkspaceKey = key;
       preserveFocus($("workspace"), () => renderWorkspace($("workspace"), state, actions));

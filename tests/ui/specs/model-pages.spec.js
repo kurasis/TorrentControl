@@ -58,6 +58,21 @@ test.describe("native row editing", () => {
     const patches = await page.evaluate(() => window.__mock.requests.filter((r) => r.operation === "updateDraft"));
     expect(patches.some((r) => "trackers" in r.payload.patch || "webSeeds" in r.payload.patch)).toBe(false);
   });
+  test("background scan preserves focus before typing in a paged exclusion row", async ({ page }) => {
+    await page.goto("/index.html");
+    await page.getByRole("button", { name: "Source-0", exact: true }).click();
+    await page.locator("#paged-exclusions-last").click();
+    const input = page.locator("#paged-exclusions-999");
+    await input.focus();
+    // No input event yet: an async replacement pager cannot restore this row's focus.
+    await page.evaluate(() => window.__mock.emit("scan", { state: "scanning", sourcesRevision: "0" }));
+    await expect.poll(() => page.evaluate(async () => { const { state } = await import("/app.js"); return state.scan.state; })).toBe("scanning");
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(input).toBeFocused();
+    await input.fill("changed-before-scan");
+    await input.press("Tab");
+    await expect.poll(() => page.evaluate(() => window.__mock.draft.sources[0].exclusions[999])).toBe("changed-before-scan");
+  });
   test("source switches preserve unseen exclusion patterns", async ({ page }) => {
     await page.goto("/index.html");
     await page.getByRole("button", { name: "Source-0", exact: true }).click();

@@ -754,16 +754,16 @@ function editableRows(key, owner, revision, actions, label) {
         h("button", { type: "button", onclick: () => actions.editRow(key, owner, index, "remove", null, revision) }, t("remove")));
     }
     const input = h("input", { type: "text", id: `paged-${key}-${index}`, value: key === "trackers" ? row.url : row,
-      oninput: (event) => { event.target.dataset.rowDirty = "true"; },
-      onblur: (event) => { event.target.dataset.rowDirty = "false"; actions.renderEditor(); },
+      dataset: { rowEditor: "true" },
+      onblur: () => actions.renderEditor(),
       "aria-label": `${label} ${index + 1}`, spellcheck: "false", onchange: (event) => {
         if (key === "trackers") row.url = event.target.value;
         actions.editRow(key, owner, index, "set", key === "trackers" ? row : event.target.value, revision);
       } });
     return h("div", { class: "collection-row" }, input,
       key === "trackers" ? h("input", { type: "number", id: `paged-tier-${index}`, value: row.tier, min: 0, max: 999,
-        oninput: (event) => { event.target.dataset.rowDirty = "true"; },
-        onblur: (event) => { event.target.dataset.rowDirty = "false"; actions.renderEditor(); },
+        dataset: { rowEditor: "true" },
+        onblur: () => actions.renderEditor(),
         "aria-label": t("colTier"), onchange: (event) => { row.tier = Number(event.target.value); actions.editRow(key, owner, index, "set", row, revision); } }) : null,
       key === "trackers" ? h("input", { type: "checkbox", id: `paged-enabled-${index}`, checked: row.enabled,
         "aria-label": t("colEnabled"), onchange: (event) => { row.enabled = event.target.checked; actions.editRow(key, owner, index, "set", row, revision); } }) : null,
