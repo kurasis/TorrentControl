@@ -101,6 +101,19 @@ jobs:
       - name: Test (unit + headless integration proof)
         run: ctest --preset windows-x64-release
 
+      - name: Long session (3000 real jobs per headless and WebView2 process)
+        run: python tests/performance/session_memory.py --proof build/windows-x64-release/tools/tc-proof/tc-workflow-proof.exe --gui build/windows-x64-release/src/app/windows/TorrentControl.exe --report build/performance/windows-long-session.json
+
+      - name: Upload Windows long-session evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-long-session
+          path: |
+            build/performance/windows-long-session.json
+            build/performance/windows-long-session-details/
+          if-no-files-found: warn
+
       - name: Local payload cancellation and output preservation
         run: python tests/performance/payload_cancellation.py --proof build/windows-x64-release/tools/tc-proof/tc-proof.exe --report build/performance/windows-payload-cancellation.json
 
@@ -249,6 +262,19 @@ jobs:
 
       - name: Whole process-tree memory (headless baseline)
         run: build/performance-python/bin/python tests/performance/workflow_memory.py --proof build/linux-release/tools/tc-proof/tc-workflow-proof --report build/performance/linux-process-memory.json
+
+      - name: Long session (3000 real jobs in one headless process)
+        run: build/performance-python/bin/python tests/performance/session_memory.py --proof build/linux-release/tools/tc-proof/tc-workflow-proof --report build/performance/linux-long-session.json
+
+      - name: Upload Linux long-session evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-long-session
+          path: |
+            build/performance/linux-long-session.json
+            build/performance/linux-long-session-details/
+          if-no-files-found: warn
 
       - name: Install isolated SMB fixture prerequisites
         run: |

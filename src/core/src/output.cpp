@@ -8,7 +8,9 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <chrono>
 #include <random>
+#include <thread>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -65,15 +67,24 @@ void write_new_file(fs::path const& path, std::string_view bytes, bool& created)
 
 void remove_file(fs::path const& path) { DeleteFileW(native::extended_path(path).c_str()); }
 
-void move_into_place(fs::path const& from, fs::path const& to, bool replace)
+void move_into_place(fs::path const& from, fs::path const& to, CommitOptions const& options)
 {
     DWORD flags = MOVEFILE_WRITE_THROUGH;
-    if (replace) flags |= MOVEFILE_REPLACE_EXISTING;
-    if (MoveFileExW(native::extended_path(from).c_str(), native::extended_path(to).c_str(), flags)) return;
-    DWORD const err = GetLastError();
-    if (err == ERROR_ALREADY_EXISTS || err == ERROR_FILE_EXISTS)
-        throw CoreError(ErrorCode::OutputConflict, "Another program created the output file while the torrent was being made",
-            static_cast<int>(err));
+    if (options.replace_existing) flags |= MOVEFILE_REPLACE_EXISTING;
+    DWORD err = 0;
+    for (unsigned attempt = 0; ; ++attempt) {
+        if (MoveFileExW(native::extended_path(from).c_str(), native::extended_path(to).c_str(), flags)) return;
+        err = GetLastError();
+        if (err == ERROR_ALREADY_EXISTS || err == ERROR_FILE_EXISTS)
+            throw CoreError(ErrorCode::OutputConflict, "Another program created the output file while the torrent was being made",
+                static_cast<int>(err));
+        // A reader/scanner can briefly deny rename/delete access even after
+        // our writer closed. Keep both files intact and retry the same rename,
+        // with at most 500 ms of added wait. Persistent denial remains a failure.
+        if (attempt == 10 || (err != ERROR_ACCESS_DENIED && err != ERROR_SHARING_VIOLATION && err != ERROR_LOCK_VIOLATION)) break;
+        if (options.on_stage) options.on_stage(CommitStage::RenameRetry);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
     write_failed("Cannot move the torrent file into place", static_cast<int>(err));
 }
 
@@ -125,8 +136,9 @@ void sync_directory(fs::path const& dir)
     ::close(fd);
 }
 
-void move_into_place(fs::path const& from, fs::path const& to, bool replace)
+void move_into_place(fs::path const& from, fs::path const& to, CommitOptions const& options)
 {
+    bool const replace = options.replace_existing;
     if (replace) {
         if (::rename(from.c_str(), to.c_str()) != 0) {
             int const err = errno;
@@ -245,7 +257,7 @@ CommitResult commit_output(fs::path const& output, std::string_view bytes, Commi
                 || reopened.info_hashes().v2 != expected.info_hashes().v2)
                 throw CoreError(ErrorCode::OutputWriteFailed, "The written torrent file does not match what was generated");
             if (options.on_stage) options.on_stage(CommitStage::BeforeCommit);
-            move_into_place(temp, target, options.replace_existing);
+            move_into_place(temp, target, options);
         } catch (...) {
             // A failed exclusive create must never delete somebody else's file.
             if (created) remove_file(temp);

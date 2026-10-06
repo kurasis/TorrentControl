@@ -323,6 +323,126 @@ TEST_CASE("stale draft revisions are rejected", "[service]")
     CHECK_THROWS_AS(h.app->update_draft({{"pieceLength", 1000}}, std::nullopt), core::CoreError);
 }
 
+TEST_CASE("reducing worker concurrency drains running jobs before starting queued work", "[service][jobs][retention]")
+{
+    tc::test::TempDir dir;
+    auto const file = dir.path() / "a.bin";
+    tc::test::write_file(file, 32768, 1);
+    auto const bytes = tc::test::make_torrent(file, core::TorrentFormat::V1, 16384);
+    auto const mapping = core::map_to_root(core::Metainfo::parse(bytes), file);
+    Gate gate; gate.close();
+    JobScheduler::Options options;
+    options.max_concurrent = 2;
+    options.payload_factory = [&] { return std::make_unique<GatedSource>(gate); };
+    std::mutex events_mutex;
+    std::vector<std::pair<std::string, JobState>> events;
+    JobScheduler jobs(options, [&](JobSnapshot const& job) {
+        std::lock_guard lock(events_mutex); events.emplace_back(job.id, job.state);
+    });
+    auto const first = jobs.enqueue_verify(VerifyJobSpec{"first", bytes, mapping});
+    auto const second = jobs.enqueue_verify(VerifyJobSpec{"second", bytes, mapping});
+    auto const third = jobs.enqueue_verify(VerifyJobSpec{"third", bytes, mapping});
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+    while (gate.waiting < 2 && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    bool const parallel = gate.waiting == 2;
+    if (!parallel) gate.release();
+    REQUIRE(parallel);
+    CHECK(jobs.find(third)->state == JobState::Queued);
+    jobs.set_max_concurrent(1); gate.release(); jobs.wait_idle();
+    auto position = [&](std::string const& id, JobState state) {
+        return std::find(events.begin(), events.end(), std::pair{id, state}) - events.begin();
+    };
+    CHECK(position(third, JobState::Hashing) > position(first, JobState::Succeeded));
+    CHECK(position(third, JobState::Hashing) > position(second, JobState::Succeeded));
+    CHECK(jobs.find(third)->state == JobState::Succeeded);
+    CHECK(jobs.retention_summary()["workers"] == 2);
+    jobs.set_max_concurrent(100); jobs.set_max_concurrent(1);
+    CHECK(jobs.retention_summary()["workers"] == 8);
+    CHECK(jobs.retention_summary()["verifySpecs"] == 0);
+}
+
+TEST_CASE("cleared batch identifiers and queued inputs are bounded while other work runs", "[service][jobs][retention]")
+{
+    Harness h;
+    h.app->add_sources({h.dataset("Collection", 2, 16 * kib)});
+    h.app->wait_for_scan();
+    h.gate.close();
+    auto const active = h.app->start_create();
+    bool const hashing = h.events.wait_state(active, "Hashing");
+    if (!hashing) h.gate.release();
+    REQUIRE(hashing);
+    for (int i = 0; i < 130; ++i) {
+        h.app->plan_batch("single", "rename", h.dir.path());
+        auto const ids = h.app->start_batch();
+        REQUIRE(ids.size() == 1);
+        h.app->jobs().cancel(ids.front());
+    }
+    h.app->clear_finished_jobs();
+    auto const retained = h.app->retention_summary();
+    CHECK(retained["jobs"] == 1);
+    CHECK(retained["createSpecs"] == 1); // The running job still owns its frozen input.
+    CHECK(retained["batches"] == 0);
+    CHECK(retained["appBatches"] == 0);
+    CHECK(retained["appBatchJobIds"] == 0);
+    CHECK(retained["archivedBatches"] == 64);
+    CHECK(h.app->jobs().batch_status("batch-1")["total"] == 0);
+    CHECK(h.app->jobs().batch_status("batch-100")["cancelled"] == 1);
+    CHECK(h.app->jobs().batch_status("batch-130")["cancelled"] == 1);
+    h.gate.release(); h.app->jobs().wait_idle();
+    CHECK(h.state(active).starts_with("Succeeded"));
+    CHECK(h.app->retention_summary()["createSpecs"] == 0);
+}
+
+TEST_CASE("terminal listeners can remove their own history without destroying a running worker", "[service][jobs][retention]")
+{
+    tc::test::TempDir dir;
+    auto const file = dir.path() / "a.bin";
+    tc::test::write_file(file, 16384, 1);
+    auto const bytes = tc::test::make_torrent(file, core::TorrentFormat::V1, 16384);
+    auto const mapping = core::map_to_root(core::Metainfo::parse(bytes), file);
+    std::unique_ptr<JobScheduler> jobs;
+    std::atomic<int> completed{0};
+    jobs = std::make_unique<JobScheduler>(JobScheduler::Options{}, [&](JobSnapshot const& job) {
+        if (is_terminal(job.state)) { jobs->clear_finished(); ++completed; }
+    });
+    jobs->enqueue_verify(VerifyJobSpec{"first", bytes, mapping});
+    jobs->enqueue_verify(VerifyJobSpec{"second", bytes, mapping});
+    jobs->wait_idle();
+    CHECK(completed == 2);
+    CHECK(jobs->snapshot().empty());
+    CHECK(jobs->retention_summary()["workers"] == 1);
+}
+
+TEST_CASE("concurrent history clearing does not invalidate another clear or enqueue", "[service][jobs][retention]")
+{
+    tc::test::TempDir dir;
+    auto const file = dir.path() / "a.bin";
+    tc::test::write_file(file, 16384, 1);
+    auto const bytes = tc::test::make_torrent(file, core::TorrentFormat::V1, 16384);
+    auto const mapping = core::map_to_root(core::Metainfo::parse(bytes), file);
+    Gate listener_gate; listener_gate.close();
+    std::atomic<int> terminals{0};
+    JobScheduler jobs({}, [&](JobSnapshot const& job) {
+        if (is_terminal(job.state) && terminals.fetch_add(1) == 0) listener_gate.pass();
+    });
+    jobs.enqueue_verify(VerifyJobSpec{"first", bytes, mapping});
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+    while (!listener_gate.waiting && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+    bool const waiting = listener_gate.waiting > 0;
+    if (!waiting) listener_gate.release();
+    REQUIRE(waiting);
+    std::jthread clear([&] { jobs.clear_finished(); });
+    while (jobs.bridge_page(0, 0)["total"] != 0 && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+    bool const removed = jobs.bridge_page(0, 0)["total"] == 0;
+    auto const second = jobs.enqueue_verify(VerifyJobSpec{"second", bytes, mapping});
+    jobs.clear_finished();
+    listener_gate.release(); clear.join(); jobs.wait_idle();
+    CHECK(removed);
+    CHECK(jobs.find(second)->state == JobState::Succeeded);
+    CHECK(jobs.retention_summary()["verifySpecs"] == 0);
+}
+
 TEST_CASE("profile switches show removals, keep private trackers and can be undone", "[service][profiles]")
 {
     Harness h;

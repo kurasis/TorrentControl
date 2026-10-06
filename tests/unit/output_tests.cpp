@@ -11,8 +11,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <optional>
+#include <memory>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <cerrno>
 #include <csignal>
 #include <sys/resource.h>
@@ -64,7 +67,10 @@ TEST_CASE("output is written through a validated temporary file", "[output]")
     CHECK(r.path == fs::absolute(out).lexically_normal());
     CHECK_FALSE(r.replaced_existing);
     CHECK(tc::test::read_all(out) == valid);
-    CHECK(stages == std::vector<CommitStage>{CommitStage::TempWritten, CommitStage::BeforeCommit});
+    REQUIRE(stages.size() >= 2);
+    CHECK(stages[0] == CommitStage::TempWritten);
+    CHECK(stages[1] == CommitStage::BeforeCommit);
+    for (std::size_t i = 2; i < stages.size(); ++i) CHECK(stages[i] == CommitStage::RenameRetry);
     CHECK(temp_files(dir.path()) == 0);
 }
 
@@ -101,6 +107,101 @@ TEST_CASE("an output created by another process during the job is not overwritte
     CHECK(tc::test::read_all(out) == other);
     CHECK(temp_files(dir.path()) == 0);
 }
+
+#ifdef _WIN32
+TEST_CASE("Windows atomic commit tolerates temporary rename locks and preserves persistent conflicts", "[output][W07][windows]")
+{
+    tc::test::TempDir dir;
+    auto const out = dir.path() / "locked.torrent";
+    auto close_handle = [](void* handle) { if (handle) CloseHandle(handle); };
+    std::unique_ptr<void, decltype(close_handle)> lock(nullptr, close_handle);
+    auto lock_file = [&](fs::path const& path) {
+        HANDLE handle = CreateFileW(path.c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL, nullptr);
+        REQUIRE(handle != INVALID_HANDLE_VALUE);
+        lock.reset(handle); // Intentionally omit FILE_SHARE_DELETE.
+    };
+    CommitOptions options;
+    unsigned retries = 0;
+
+    SECTION("a briefly locked previous output is replaced after the actual failed rename")
+    {
+        tc::test::write_bytes(out, other);
+        lock_file(out);
+        options.replace_existing = true;
+        options.on_stage = [&](CommitStage stage) {
+            if (stage != CommitStage::RenameRetry) return;
+            ++retries;
+            CHECK(tc::test::read_all(out) == other);
+            lock.reset();
+        };
+        CHECK(commit_output(out, valid, options).replaced_existing);
+        CHECK(retries >= 1);
+        CHECK(tc::test::read_all(out) == valid);
+    }
+    SECTION("a persistent lock fails after the bounded retry count and preserves the previous output")
+    {
+        tc::test::write_bytes(out, other);
+        lock_file(out);
+        options.replace_existing = true;
+        options.on_stage = [&](CommitStage stage) {
+            if (stage != CommitStage::RenameRetry) return;
+            ++retries;
+            CHECK(tc::test::read_all(out) == other);
+        };
+        auto const error = commit_failure(out, valid, options);
+        REQUIRE(error);
+        CHECK(error->code() == ErrorCode::OutputWriteFailed);
+        CHECK(error->phase() == Phase::Committing);
+        REQUIRE(error->os_error());
+        CHECK((*error->os_error() == ERROR_ACCESS_DENIED
+            || *error->os_error() == ERROR_SHARING_VIOLATION
+            || *error->os_error() == ERROR_LOCK_VIOLATION));
+        CHECK(retries == 10);
+        CHECK(tc::test::read_all(out) == other);
+        lock.reset();
+    }
+    SECTION("a temporary source lock can be released before publishing a new output")
+    {
+        options.on_stage = [&](CommitStage stage) {
+            if (stage == CommitStage::BeforeCommit) {
+                for (auto const& entry : fs::directory_iterator(dir.path()))
+                    if (glob_match(".*.tc-*.tmp", to_utf8(entry.path().filename()))) lock_file(entry.path());
+                REQUIRE(lock);
+            } else if (stage == CommitStage::RenameRetry) {
+                ++retries;
+                CHECK_FALSE(fs::exists(out));
+                CHECK(temp_files(dir.path()) == 1);
+                lock.reset();
+            }
+        };
+        CHECK_FALSE(commit_output(out, valid, options).replaced_existing);
+        CHECK(retries >= 1);
+        CHECK(tc::test::read_all(out) == valid);
+    }
+    SECTION("a competing output created during a retry still cannot be overwritten")
+    {
+        options.on_stage = [&](CommitStage stage) {
+            if (stage == CommitStage::BeforeCommit) {
+                for (auto const& entry : fs::directory_iterator(dir.path()))
+                    if (glob_match(".*.tc-*.tmp", to_utf8(entry.path().filename()))) lock_file(entry.path());
+                REQUIRE(lock);
+            } else if (stage == CommitStage::RenameRetry) {
+                ++retries;
+                lock.reset();
+                tc::test::write_bytes(out, other);
+            }
+        };
+        auto const error = commit_failure(out, valid, options);
+        REQUIRE(error);
+        CHECK(error->code() == ErrorCode::OutputConflict);
+        CHECK(retries >= 1);
+        CHECK(tc::test::read_all(out) == other);
+    }
+    CHECK(temp_files(dir.path()) == 0);
+}
+#endif
 
 TEST_CASE("a write failure keeps the previous output and removes the temporary file", "[output][W07]")
 {

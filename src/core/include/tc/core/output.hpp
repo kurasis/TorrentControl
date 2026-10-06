@@ -31,6 +31,8 @@ enum class CommitStage {
     TempWritten,
     // Validation passed; the rename is next.
     BeforeCommit,
+    // Windows rename was blocked; the same atomic operation will be retried.
+    RenameRetry,
 };
 
 struct CommitOptions {

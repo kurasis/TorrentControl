@@ -1,0 +1,34 @@
+{
+  "sourceBaseCommit": "1ec961a0c376f8faad6c705a5d003cdd8c646f1a",
+  "scope": "1000 v1 jobs over 32 real files; 700 create including 300 single-item batches and 300 verify; diagnostics-only workflow hooks; no renderer or OS memory baseline claim",
+  "retained": {
+    "batches": 300,
+    "cancelled": 0,
+    "createSpecs": 700,
+    "created": 700,
+    "failed": 0,
+    "inputManifestEntries": 22400,
+    "jobThreads": 1000,
+    "jobs": 1000,
+    "running": 0,
+    "succeeded": 1000,
+    "verified": 300,
+    "verifyInputBytes": 338400,
+    "verifySpecs": 300
+  },
+  "cleared": {
+    "batches": 300,
+    "cancelled": 0,
+    "createSpecs": 0,
+    "created": 0,
+    "failed": 0,
+    "inputManifestEntries": 0,
+    "jobThreads": 0,
+    "jobs": 0,
+    "running": 0,
+    "succeeded": 0,
+    "verified": 0,
+    "verifyInputBytes": 0,
+    "verifySpecs": 0
+  }
+}

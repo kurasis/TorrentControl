@@ -4,7 +4,7 @@
 //
 // Every job owns a snapshot of its settings, taken when it is queued, so a
 // later draft or profile edit never changes queued work. The scheduler runs
-// at most `max_concurrent` jobs, each on its own thread; the native job state
+// at most `max_concurrent` jobs on a reusable worker pool; the native job state
 // is authoritative and survives a renderer reload.
 
 #include "tc/core/manifest.hpp"
@@ -19,6 +19,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -180,14 +181,18 @@ public:
     void resume(std::string const& id);
     void cancel(std::string const& id);
     // Removes finished jobs from the list.
-    void clear_finished();
+    std::vector<std::string> clear_finished();
 
     void set_max_concurrent(int n);
 
     std::vector<JobSnapshot> snapshot() const;
     std::optional<JobSnapshot> find(std::string const& id) const;
+    bool contains(std::string const& id) const;
     nlohmann::json bridge_page(std::size_t offset, std::size_t limit) const;
+    nlohmann::json bridge_job(std::string const& id) const;
     nlohmann::json batch_status(std::string const& id) const;
+    // Developer diagnostics count actual retained models and worker resources.
+    nlohmann::json retention_summary() const;
     nlohmann::json verification_page(std::string const& id, std::size_t offset, std::size_t limit, bool errors_only) const;
     nlohmann::json verification_file(std::string const& id, std::size_t index) const;
     nlohmann::json layout_page(std::string const& id, std::size_t offset, std::size_t limit) const;
@@ -203,22 +208,30 @@ private:
     struct Job;
 
     void schedule_locked();
+    void worker();
     void run(Job& job);
     void run_create(Job& job);
     void run_verify(Job& job);
     void set_state(Job& job, JobState to, std::unique_lock<std::mutex>& lock);
     void notify(Job& job, std::unique_lock<std::mutex>& lock);
     void log(Job& job, std::string line);
-    Job& get(std::string const& id);
+    std::shared_ptr<Job> get(std::string const& id);
 
     Options options_;
     Listener listener_;
     mutable std::mutex mutex_;
     std::condition_variable idle_;
-    std::map<std::string, std::unique_ptr<Job>> jobs_;
+    std::condition_variable work_;
+    std::map<std::string, std::shared_ptr<Job>> jobs_;
+    std::deque<std::string> pending_;
+    std::vector<std::jthread> workers_;
     std::vector<std::string> order_;
     struct BatchCounts { std::size_t total = 0, done = 0, failed = 0, cancelled = 0; };
     std::map<std::string, BatchCounts> batch_counts_;
+    // Recent aggregate reports survive Clear for in-flight UI notifications.
+    // Large job-id lists/results are not archived.
+    std::map<std::string, BatchCounts> recent_batches_;
+    std::deque<std::string> recent_batch_order_;
     std::uint64_t next_id_ = 1;
     std::uint64_t collection_revision_ = 0;
     int running_ = 0;

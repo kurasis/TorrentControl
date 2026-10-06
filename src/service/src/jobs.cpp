@@ -191,8 +191,8 @@ struct JobScheduler::Job {
     std::vector<std::size_t> verification_errors;
     std::stop_source stop;
     core::PauseControl pause;
-    std::jthread thread;
     bool started = false;
+    bool finished = false;
     Clock::time_point last_notify{};
     Clock::time_point active_since{};
     std::chrono::duration<double> active_before{0};
@@ -205,7 +205,7 @@ JobScheduler::JobScheduler(Options options, Listener listener) : options_(std::m
         return static_cast<std::int64_t>(
             std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
     };
-    options_.max_concurrent = std::max(1, options_.max_concurrent);
+    options_.max_concurrent = std::clamp(options_.max_concurrent, 1, 8);
 }
 
 JobScheduler::~JobScheduler()
@@ -215,15 +215,15 @@ JobScheduler::~JobScheduler()
         shutting_down_ = true;
         for (auto& [id, job] : jobs_) job->stop.request_stop();
     }
-    for (auto& [id, job] : jobs_)
-        if (job->thread.joinable()) job->thread.join();
+    work_.notify_all();
+    for (auto& thread : workers_) if (thread.joinable()) thread.join();
 }
 
-JobScheduler::Job& JobScheduler::get(std::string const& id)
+std::shared_ptr<JobScheduler::Job> JobScheduler::get(std::string const& id)
 {
     auto it = jobs_.find(id);
     if (it == jobs_.end()) throw ServiceError("JOB_NOT_FOUND", "No such job");
-    return *it->second;
+    return it->second;
 }
 
 void JobScheduler::log(Job& job, std::string line)
@@ -273,7 +273,7 @@ std::string JobScheduler::enqueue_create(CreateJobSpec spec)
     if (spec.manifest.has_value() == spec.scan.has_value())
         throw std::invalid_argument("a create job needs either a manifest or a scan request");
     std::unique_lock lock(mutex_);
-    auto job = std::make_unique<Job>();
+    auto job = std::make_shared<Job>();
     job->snap.id = "job-" + std::to_string(next_id_++);
     job->snap.kind = JobKind::Create;
     job->snap.name = spec.name;
@@ -282,8 +282,9 @@ std::string JobScheduler::enqueue_create(CreateJobSpec spec)
     job->create = std::move(spec);
     Job& ref = *job;
     std::string const id = ref.snap.id;
-    jobs_.emplace(id, std::move(job));
+    jobs_.emplace(id, job);
     order_.push_back(id);
+    pending_.push_back(id);
     if (!ref.snap.batch_id.empty()) ++batch_counts_[ref.snap.batch_id].total;
     ++collection_revision_;
     log(ref, "Queued");
@@ -295,7 +296,7 @@ std::string JobScheduler::enqueue_create(CreateJobSpec spec)
 std::string JobScheduler::enqueue_verify(VerifyJobSpec spec)
 {
     std::unique_lock lock(mutex_);
-    auto job = std::make_unique<Job>();
+    auto job = std::make_shared<Job>();
     job->snap.id = "job-" + std::to_string(next_id_++);
     job->snap.kind = JobKind::Verify;
     job->snap.name = spec.name;
@@ -303,8 +304,9 @@ std::string JobScheduler::enqueue_verify(VerifyJobSpec spec)
     job->verify = std::move(spec);
     Job& ref = *job;
     std::string const id = ref.snap.id;
-    jobs_.emplace(id, std::move(job));
+    jobs_.emplace(id, job);
     order_.push_back(id);
+    pending_.push_back(id);
     ++collection_revision_;
     log(ref, "Queued for verification");
     notify(ref, lock);
@@ -315,19 +317,35 @@ std::string JobScheduler::enqueue_verify(VerifyJobSpec spec)
 void JobScheduler::schedule_locked()
 {
     if (shutting_down_) return;
-    for (auto const& id : order_) {
-        if (running_ >= options_.max_concurrent) return;
-        Job& job = *jobs_.at(id);
-        if (job.started || job.snap.state != JobState::Queued) continue;
-        job.started = true;
+    while (workers_.size() < static_cast<std::size_t>(options_.max_concurrent))
+        workers_.emplace_back([this] { worker(); });
+    work_.notify_all();
+}
+
+void JobScheduler::worker()
+{
+    std::unique_lock lock(mutex_);
+    for (;;) {
+        work_.wait(lock, [&] { return shutting_down_ || (!pending_.empty() && running_ < options_.max_concurrent); });
+        if (shutting_down_) return;
+        auto const id = std::move(pending_.front());
+        pending_.pop_front();
+        auto found = jobs_.find(id);
+        if (found == jobs_.end() || found->second->snap.state != JobState::Queued) continue;
+        auto job = found->second; // Notification/clear can remove history while this worker finishes.
+        job->started = true;
         ++running_;
-        job.thread = std::jthread([this, &job] {
-            run(job);
-            std::lock_guard lock(mutex_);
-            --running_;
-            schedule_locked();
-            idle_.notify_all();
-        });
+        lock.unlock();
+        run(*job);
+        lock.lock();
+        // run_create/run_verify hold references to these inputs until they return.
+        job->create.reset();
+        job->verify.reset();
+        job->finished = true;
+        --running_;
+        job.reset();
+        work_.notify_all();
+        idle_.notify_all();
     }
 }
 
@@ -549,7 +567,8 @@ void JobScheduler::run_verify(Job& job)
 void JobScheduler::pause(std::string const& id)
 {
     std::unique_lock lock(mutex_);
-    Job& job = get(id);
+    auto owner = get(id);
+    Job& job = *owner;
     if (job.snap.state != JobState::Hashing)
         throw ServiceError("INVALID_STATE", "Only a job that is hashing can be paused");
     job.pause.request_pause();
@@ -559,7 +578,8 @@ void JobScheduler::pause(std::string const& id)
 void JobScheduler::resume(std::string const& id)
 {
     std::unique_lock lock(mutex_);
-    Job& job = get(id);
+    auto owner = get(id);
+    Job& job = *owner;
     if (job.snap.state != JobState::Paused && job.snap.state != JobState::Pausing)
         throw ServiceError("INVALID_STATE", "Only a paused job can be resumed");
     set_state(job, JobState::Hashing, lock);
@@ -569,10 +589,14 @@ void JobScheduler::resume(std::string const& id)
 void JobScheduler::cancel(std::string const& id)
 {
     std::unique_lock lock(mutex_);
-    Job& job = get(id);
+    auto owner = get(id);
+    Job& job = *owner;
     switch (job.snap.state) {
     case JobState::Queued:
         if (!job.started) {
+            job.create.reset();
+            job.verify.reset();
+            job.finished = true;
             set_state(job, JobState::Cancelled, lock);
             return;
         }
@@ -589,27 +613,49 @@ void JobScheduler::cancel(std::string const& id)
     if (job.snap.state != JobState::Queued) set_state(job, JobState::Cancelling, lock);
 }
 
-void JobScheduler::clear_finished()
+std::vector<std::string> JobScheduler::clear_finished()
 {
     std::unique_lock lock(mutex_);
     std::vector<std::string> keep;
+    std::vector<std::string> removed;
+    std::vector<std::shared_ptr<Job>> finishing;
     for (auto const& id : order_) {
         auto it = jobs_.find(id);
         if (is_terminal(it->second->snap.state)) {
-            if (it->second->thread.joinable()) {
-                // The thread is finishing its bookkeeping; join outside the lock.
-                std::jthread t = std::move(it->second->thread);
-                lock.unlock();
-                t.join();
-                lock.lock();
-            }
+            removed.push_back(id);
+            finishing.push_back(it->second);
             jobs_.erase(it);
         } else {
             keep.push_back(id);
         }
     }
     order_ = std::move(keep);
+    std::erase_if(pending_, [&](auto const& id) { return !jobs_.contains(id); });
+    std::set<std::string> remaining_batches;
+    for (auto const& [id, job] : jobs_) if (!job->snap.batch_id.empty()) remaining_batches.insert(job->snap.batch_id);
+    // Follow enqueue/history order, not lexical IDs (batch-99 > batch-100).
+    for (auto const& job : finishing) {
+        auto const& batch = job->snap.batch_id;
+        auto found = batch_counts_.find(batch);
+        if (found == batch_counts_.end() || remaining_batches.contains(batch)) continue;
+        std::erase(recent_batch_order_, batch);
+        recent_batch_order_.push_back(batch);
+        recent_batches_[batch] = found->second;
+        batch_counts_.erase(found);
+    }
+    while (recent_batch_order_.size() > 64) {
+        recent_batches_.erase(recent_batch_order_.front()); recent_batch_order_.pop_front();
+    }
     ++collection_revision_;
+    // External callers retain the old join-before-return guarantee. A listener
+    // running on a worker can clear its own terminal row without joining itself.
+    bool const on_worker = std::any_of(workers_.begin(), workers_.end(), [](auto const& thread) {
+        return thread.get_id() == std::this_thread::get_id();
+    });
+    if (!on_worker) idle_.wait(lock, [&] {
+        return std::all_of(finishing.begin(), finishing.end(), [](auto const& job) { return !job->started || job->finished; });
+    });
+    return removed;
 }
 
 void JobScheduler::set_max_concurrent(int n)
@@ -639,10 +685,48 @@ json JobScheduler::batch_status(std::string const& id) const
 {
     std::lock_guard lock(mutex_);
     auto found = batch_counts_.find(id);
-    BatchCounts const counts = found == batch_counts_.end() ? BatchCounts{} : found->second;
+    auto const recent = recent_batches_.find(id);
+    BatchCounts const counts = found != batch_counts_.end() ? found->second
+        : recent != recent_batches_.end() ? recent->second : BatchCounts{};
     auto const [total, done, failed, cancelled] = counts;
     return {{"batchId", id}, {"total", total}, {"done", done}, {"failed", failed}, {"cancelled", cancelled},
         {"finished", total > 0 && done + failed + cancelled == total}};
+}
+
+bool JobScheduler::contains(std::string const& id) const
+{
+    std::lock_guard lock(mutex_);
+    return jobs_.contains(id);
+}
+
+json JobScheduler::retention_summary() const
+{
+    std::lock_guard lock(mutex_);
+    std::size_t create_specs = 0, verify_specs = 0, entries = 0, input_bytes = 0;
+    std::size_t succeeded = 0, failed = 0, cancelled = 0, created = 0, verified = 0;
+    for (auto const& [id, job] : jobs_) {
+        if (job->create) {
+            ++create_specs;
+            if (job->create->manifest) entries += job->create->manifest->entries.size();
+        }
+        if (job->verify) { ++verify_specs; input_bytes += job->verify->torrent_bytes.size(); }
+        if (job->snap.state == JobState::Succeeded || job->snap.state == JobState::SucceededWithWarnings) ++succeeded;
+        else if (job->snap.state == JobState::Failed) ++failed;
+        else if (job->snap.state == JobState::Cancelled) ++cancelled;
+        if (job->snap.kind == JobKind::Create) ++created; else ++verified;
+    }
+    return {{"jobs", jobs_.size()}, {"createSpecs", create_specs}, {"verifySpecs", verify_specs},
+        {"inputManifestEntries", entries}, {"verifyInputBytes", input_bytes}, {"jobThreads", 0}, {"workers", workers_.size()},
+        {"batches", batch_counts_.size()}, {"archivedBatches", recent_batches_.size()}, {"running", running_}, {"succeeded", succeeded},
+        {"failed", failed}, {"cancelled", cancelled}, {"created", created}, {"verified", verified}};
+}
+
+json JobScheduler::bridge_job(std::string const& id) const
+{
+    std::lock_guard lock(mutex_);
+    auto found = jobs_.find(id);
+    if (found == jobs_.end()) throw ServiceError("JOB_NOT_FOUND", "No such job");
+    return to_json(found->second->snap, true);
 }
 
 json JobScheduler::bridge_page(std::size_t offset, std::size_t limit) const

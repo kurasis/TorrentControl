@@ -15,6 +15,7 @@
 #include "../runtime_policy.hpp"
 #include "../../../tools/tc-proof/workflow_fixture.hpp"
 #include "../../../tools/tc-proof/workflow_probe.hpp"
+#include "../../../tools/tc-proof/session_fixture.hpp"
 
 #include "tc/bridge/app_operations.hpp"
 #include "tc/bridge/protocol.hpp"
@@ -302,6 +303,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     std::optional<std::string> self_test_minimum_runtime;
     std::optional<std::wstring> memory_fixture;
     std::optional<std::wstring> smb_fixture;
+    std::optional<std::wstring> session_fixture;
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i < argc; ++i) {
@@ -316,6 +318,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         else if (arg == L"--self-test-minimum-runtime" && i + 1 < argc) self_test_minimum_runtime = tc::app::to_utf8(argv[++i]);
         else if (arg == L"--self-test-memory" && i + 1 < argc) memory_fixture = argv[++i];
         else if (arg == L"--self-test-smb" && i + 1 < argc) smb_fixture = argv[++i];
+        else if (arg == L"--self-test-session" && i + 1 < argc) session_fixture = argv[++i];
     }
     LocalFree(argv);
     bool const self_test = app.self_test_log.has_value();
@@ -420,6 +423,41 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
             app.dispatcher.register_operation("joinSelfTestMemory", [state](nlohmann::json const&) {
                 state->service->jobs().wait_idle();
                 return nlohmann::json{{"joined", true}};
+            });
+        }
+        if (session_fixture) {
+            auto session = std::make_shared<tc::proof::SessionFixture>(nlohmann::json::parse(
+                tc::service::read_small_file(std::filesystem::path(*session_fixture))));
+            app.dispatcher.register_operation("sessionPrepare", [state, session](nlohmann::json const& p) {
+                return session->prepare(*state->service, p.at("format"));
+            });
+            app.dispatcher.register_operation("sessionEnqueue", [state, session](nlohmann::json const& p) {
+                return session->enqueue(*state->service, p.at("kind"), p.at("count"));
+            });
+            app.dispatcher.register_operation("sessionJoin", [state](nlohmann::json const&) {
+                state->service->jobs().wait_idle(); return nlohmann::json{{"joined", true}};
+            });
+            app.dispatcher.register_operation("sessionFinish", [state, session](nlohmann::json const&) {
+                try { return session->finish_cycle(*state->service); }
+                catch (std::exception const& error) {
+                    write_self_test_log(*state, "SESSION_FAILURE " + std::string(error.what()));
+                    throw tc::bridge::BridgeError("SELF_TEST", error.what());
+                }
+            });
+            app.dispatcher.register_operation("sessionCheckpoint", [state, window](nlohmann::json const& p) {
+                auto result = state->service->retention_summary();
+                result["phase"] = p.at("phase"); result["renderer"] = p.at("renderer");
+                state->ui->invoke([&] {
+                    if (p.at("phase") == "idle") {
+                        state->performance_ticks = 0; state->performance_max_gap = 0;
+                        state->performance_last_tick = GetTickCount64();
+                        if (!SetTimer(window, performance_timer, 100, nullptr))
+                            throw tc::bridge::BridgeError("SELF_TEST", "Could not start session heartbeat");
+                    }
+                    result["nativeTicks"] = state->performance_ticks;
+                    result["nativeMaxGapMs"] = state->performance_max_gap;
+                });
+                write_self_test_log(*state, "SESSION " + result.dump()); return result;
             });
         }
         if (smb_input) {
@@ -533,14 +571,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
             PostMessageW(window, WM_CLOSE, 0, 0);
             return nlohmann::json::object();
         });
-        SetTimer(hwnd, self_test_timer, memory_fixture || smb_fixture ? 600'000 : self_test_timeout_ms, nullptr);
+        SetTimer(hwnd, self_test_timer, memory_fixture || smb_fixture || session_fixture ? 600'000 : self_test_timeout_ms, nullptr);
     }
 
     tc::app::WebViewHost::Options options;
     options.asset_dir = executable_dir() + L"\\frontend";
     options.browser_executable_folder = runtime_folder;
     options.user_data_dir = data_dir.empty() ? std::wstring() : data_dir + L"\\WebView2";
-    options.start_query = self_test && smb_fixture ? L"?selfTest=1&smbFlow=1"
+    options.start_query = self_test && session_fixture ? L"?selfTest=1&sessionFlow=1"
+        : self_test && smb_fixture ? L"?selfTest=1&smbFlow=1"
         : self_test && memory_fixture ? L"?selfTest=1&memoryFlow=1"
         : native_flow ? L"?selfTest=1&nativeFlow=1" : self_test ? L"?selfTest=1" : L"";
     options.on_renderer_recovery = [&app] {
