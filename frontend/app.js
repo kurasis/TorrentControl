@@ -688,6 +688,11 @@ async function start() {
     const info = await request("getEngineInfo");
     await refresh();
     if (selfTest) {
+      if (new URLSearchParams(location.search).get("smbFlow") === "1") {
+        const { runSmbFlow } = await import("./smb-self-test.js");
+        await runSmbFlow(actions, state);
+        return;
+      }
       if (new URLSearchParams(location.search).get("memoryFlow") === "1") {
         const { runMemoryFlow } = await import("./memory-self-test.js");
         await request("reportSelfTest", { ok: true, ...await runMemoryFlow(actions, state) });

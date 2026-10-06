@@ -228,5 +228,7 @@ AppService-сценарии в headless и настоящем Windows/WebView2, 
 процессы и очистку истории. Добавлены реальные TCP/SMB-сбои Linux CIFS/Samba:
 ожидающее чтение, задержанное открытие, отключение сервера и успешный повтор.
 Исправлены отказ проверки большого hybrid torrent и удержание удалённой native
-истории в renderer. Remote Windows SMB, длительные сессии с тысячами заданий
-и произвольные storage-driver stalls остаются открытыми gates.
+истории в renderer. Следующий [Windows SMB пакет](windows-smb-faults.md)
+проверяет Windows redirector и настоящее закрытие WebView2 при зависших
+чтении/открытии через отдельную Linux VM. Физический удалённый NAS, длительные
+сессии с тысячами заданий и произвольные storage-driver stalls остаются gates.

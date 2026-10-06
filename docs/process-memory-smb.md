@@ -114,11 +114,13 @@ sudo build/performance-python/bin/python tests/performance/smb_faults.py \
 ```
 
 This is one physical Linux runner with an isolated peer network stack. It
-establishes real TCP/SMB and Linux CIFS fault behavior, not remote Windows SMB
+establishes real TCP/SMB and Linux CIFS fault behavior, not Windows SMB
 driver behavior, Windows delayed-open cancellation or a universal two-second
 deadline. Linux synchronous calls intentionally retain Cancelling until the
-OS operation returns. Remote Windows SMB, arbitrary storage-driver stalls
-and shutdown against an indefinitely unavailable server remain release gates.
+OS operation returns. The [Windows SMB package](windows-smb-faults.md) separately
+exercises Windows UNC and real GUI shutdown against a Linux guest kernel.
+Physical remote NAS, arbitrary storage-driver stalls and shutdown against an
+indefinitely unavailable server remain release gates.
 The cloud workspace kernel lacks CIFS; that fixture is validated on the Linux
 CI runner, and this prerequisite is not reported as a passing local SMB test.
 Fuzz campaigns retain the user's three-run smoke limit.
