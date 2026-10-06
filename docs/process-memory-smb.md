@@ -69,6 +69,9 @@ measurements; CI publishes the Windows GUI/headless pairs and Linux SMB cases.
 `tests/performance/smb_faults.py` requires a disposable root-capable Linux
 runner, Samba, cifs-utils, iproute2 and the CIFS kernel module. It creates its
 own Samba configuration, read-only guest share, veth pair and network namespace.
+Samba listens on standard port 445 inside that namespace. Linux CIFS interface
+updates use port 445; a nonstandard fixture port prevented reconnect on the
+6.17 CI kernel despite a successful initial mount.
 The client reaches the isolated peer through TCP/SMB 3.1.1 and a real kernel
 CIFS mount with `cache=none`, `actimeo=0` and a soft reconnect policy. There are
 no public SMB endpoints or user credentials. Existing machine shares and SMB

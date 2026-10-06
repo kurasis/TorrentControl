@@ -62,7 +62,7 @@ map to guest = Bad User
 guest account = nobody
 interfaces = {self.server_ip}
 bind interfaces only = yes
-smb ports = 1445
+smb ports = 445
 server min protocol = SMB3_00
 server max protocol = SMB3_11
 disable netbios = yes
@@ -96,7 +96,7 @@ read only = yes
         run('ip', '-n', self.namespace, 'link', 'set', 'lo', 'up')
         self.start_server()
         run('mount', '-t', 'cifs', f'//{self.server_ip}/payload', str(self.mount), '-o',
-            'guest,username=tc-fixture,port=1445,vers=3.1.1,cache=none,actimeo=0,closetimeo=0,nolease,soft,echo_interval=1,ro,noserverino', timeout=30)
+            'guest,username=tc-fixture,vers=3.1.1,cache=none,actimeo=0,closetimeo=0,nolease,soft,echo_interval=1,ro,noserverino', timeout=30)
         self.mounted = True
         assert run('stat', '-f', '-c', '%T', str(self.mount)) in ('smb2', 'cifs'), 'The source must be a kernel CIFS mount'
 
@@ -126,7 +126,7 @@ read only = yes
                     messages += '\n' + samba_log.read_text(errors='replace')
                 raise RuntimeError(f'Fixture Samba server exited {self.server.returncode} during startup: ' + messages[-4000:])
             try:
-                with socket.create_connection((self.server_ip, 1445), timeout=0.2):
+                with socket.create_connection((self.server_ip, 445), timeout=0.2):
                     return
             except OSError:
                 if time.monotonic() >= deadline:
