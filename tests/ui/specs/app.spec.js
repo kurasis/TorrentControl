@@ -261,3 +261,30 @@ test.describe("native self-test recovery failure", () => {
         message: expect.stringContaining("renderer failure callback") });
   });
 });
+
+test.describe("settings persistence", () => {
+  test.use({ mockConfig: 'window.__mockConfig = { settingsSaveError: "Could not save settings" };' });
+  test("save failure restores controls and leaves committed appearance unchanged", async ({ page }) => {
+    await page.goto("/index.html");
+    await page.locator("#theme-select").selectOption("dark");
+    await expect(page.locator("#theme-select")).toHaveValue("system");
+    await expect(page.locator("#toast")).toContainText("Could not save settings");
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark");
+    await page.locator('#mode-switch [data-mode="advanced"]').click();
+    await expect(page.locator("body")).toHaveAttribute("data-mode", "simple");
+    await page.evaluate(() => { delete window.__mock.config.settingsSaveError; });
+    await page.locator("#theme-select").selectOption("dark");
+    await expect(page.locator("#theme-select")).toHaveValue("dark");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
+});
+
+test.describe("session-only settings", () => {
+  test.use({ mockConfig: 'window.__mockConfig = { settings: { persistence: "memory" } };' });
+  test("storage fallback is visible after startup and preference changes", async ({ page }) => {
+    await page.goto("/index.html");
+    await expect(page.locator("#settings-persistence")).toContainText("only for this session");
+    await page.locator("#theme-select").selectOption("dark");
+    await expect(page.locator("#settings-persistence")).toBeVisible();
+  });
+});

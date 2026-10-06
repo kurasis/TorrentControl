@@ -19,13 +19,14 @@ add_executable(tc_unit_tests
     unit/metainfo_tests.cpp
     unit/metainfo_validation_tests.cpp
     unit/output_tests.cpp
+    unit/runtime_policy_tests.cpp
     unit/outgoing_bridge_tests.cpp
     unit/service_tests.cpp
     unit/verify_tests.cpp
     unit/test_support.cpp
 )
 target_link_libraries(tc_unit_tests PRIVATE TorrentControl::core TorrentControl::service TorrentControl::bridge Catch2::Catch2WithMain)
-target_include_directories(tc_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/core/src)
+target_include_directories(tc_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/core/src ${PROJECT_SOURCE_DIR}/src/app)
 tc_set_warnings(tc_unit_tests)
 if(WIN32)
     target_sources(tc_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/app/windows/long_path_aware.manifest)

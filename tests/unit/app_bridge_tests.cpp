@@ -66,9 +66,10 @@ struct Bridge {
     bridge::Dispatcher d;
     int next = 1;
 
-    Bridge()
+    explicit Bridge(bool persistent = false)
     {
         service::AppService::Options o;
+        if (persistent) o.settings_path = dir.path() / "settings.json";
         o.jobs.progress_interval = std::chrono::milliseconds(0);
         app = std::make_unique<service::AppService>(std::move(o), [this](json const& e) {
             std::lock_guard l(m);
@@ -396,4 +397,24 @@ TEST_CASE("metadata field cursors page large binary keys without losing editable
     CHECK(seen == 100);
     CHECK(pages > 2); // byte budget, rather than only a row-count budget
     CHECK(b.app->torrent_metainfo(torrent["id"])->raw_info() == meta->raw_info());
+}
+
+TEST_CASE("settings IO failures cross the bridge without committing a change", "[bridge][settings]")
+{
+    Bridge b(true);
+    auto const before = b.ok("updateSettings", {{"patch", {{"theme", "light"}}}});
+    auto const file = b.dir.path() / "settings.json";
+    auto const backup = b.dir.path() / "backup.json";
+    fs::rename(file, backup);
+    fs::create_directory(file);
+    tc::test::write_file(file / "keep", 1);
+    auto const failed = b.call("updateSettings", {{"patch", {{"theme", "dark"}}}});
+    CHECK(failed["ok"] == false);
+    CHECK(failed["error"]["code"] == "SETTINGS_WRITE_FAILED");
+    CHECK(failed["error"]["retryable"] == true);
+    CHECK(b.ok("getSettings") == before);
+    fs::remove_all(file);
+    fs::rename(backup, file);
+    CHECK(b.ok("updateSettings", {{"patch", {{"theme", "dark"}}}})["theme"] == "dark");
+    CHECK(service::load_settings(file).theme == "dark");
 }

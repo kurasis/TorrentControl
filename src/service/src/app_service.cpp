@@ -340,13 +340,15 @@ json AppService::apply_profile(std::string const& id, std::optional<std::uint64_
     check_revision(revision);
     auto p = find_profile_locked(id);
     if (!p) throw ServiceError("NOT_FOUND", "No such profile");
-    undo_.push_back(draft_);
-    if (undo_.size() > max_undo) undo_.erase(undo_.begin());
+    AppSettings next_settings = settings_;
+    next_settings.last_profile = id;
     Draft next = service::plan_profile(draft_, *p).result;
     next.revision = draft_.revision;
+    save_settings_locked(next_settings);
+    undo_.push_back(draft_);
+    if (undo_.size() > max_undo) undo_.erase(undo_.begin());
     draft_ = std::move(next);
-    settings_.last_profile = id;
-    save_settings_locked();
+    settings_ = std::move(next_settings);
     bump_locked(false);
     return draft_json_locked();
 }
@@ -848,13 +850,14 @@ json AppService::load_project(fs::path const& path)
     return draft_json_locked();
 }
 
-void AppService::save_settings_locked() const
+void AppService::save_settings_locked(AppSettings const& candidate) const
 {
     if (options_.settings_path.empty()) return;
     try {
-        save_settings(options_.settings_path, settings_);
+        save_settings(options_.settings_path, candidate);
     } catch (CoreError const&) {
-        // Settings are a convenience; a failed save never blocks the workflow.
+        throw ServiceError("SETTINGS_WRITE_FAILED",
+            "Could not save settings. Check free space and write access, then try again. Your changes were not applied.", true);
     }
 }
 
@@ -863,17 +866,21 @@ json AppService::settings_json() const
     std::lock_guard lock(mutex_);
     json j = to_json(settings_);
     j.erase("customProfiles");
+    j["persistence"] = options_.settings_path.empty() ? "memory" : "disk";
     return j;
 }
 
 json AppService::update_settings(json const& patch)
 {
     std::lock_guard lock(mutex_);
-    apply_settings_patch(settings_, patch);
+    AppSettings next = settings_;
+    apply_settings_patch(next, patch);
+    save_settings_locked(next);
+    settings_ = std::move(next);
     jobs_->set_max_concurrent(settings_.max_concurrent_jobs);
-    save_settings_locked();
     json j = to_json(settings_);
     j.erase("customProfiles");
+    j["persistence"] = options_.settings_path.empty() ? "memory" : "disk";
     return j;
 }
 
@@ -904,10 +911,12 @@ json AppService::save_custom_profile(std::string const& name)
     p.trackers = draft_.trackers;
     p.allow_web_seeds = true;
     p.source_tag = draft_.source_tag;
-    settings_.custom_profiles.push_back(p);
+    AppSettings next = settings_;
+    next.custom_profiles.push_back(p);
+    next.last_profile = p.id;
+    save_settings_locked(next);
+    settings_ = std::move(next);
     draft_.profile_id = p.id;
-    settings_.last_profile = p.id;
-    save_settings_locked();
     bump_locked(false);
     return to_json(p);
 }
@@ -915,11 +924,13 @@ json AppService::save_custom_profile(std::string const& name)
 json AppService::delete_custom_profile(std::string const& id)
 {
     std::lock_guard lock(mutex_);
-    auto& list = settings_.custom_profiles;
+    AppSettings next = settings_;
+    auto& list = next.custom_profiles;
     auto it = std::find_if(list.begin(), list.end(), [&](auto const& p) { return p.id == id; });
     if (it == list.end()) throw ServiceError("NOT_FOUND", "No such custom profile");
     list.erase(it);
-    save_settings_locked();
+    save_settings_locked(next);
+    settings_ = std::move(next);
     return json{{"deleted", id}};
 }
 

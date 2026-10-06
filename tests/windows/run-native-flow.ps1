@@ -10,8 +10,9 @@ New-Item -ItemType Directory -Force -Path $EvidenceDirectory | Out-Null
 $evidence = (Resolve-Path $EvidenceDirectory).Path
 $data = Join-Path $evidence ("data-" + [guid]::NewGuid().ToString("N"))
 
-function Invoke-SelfTest([string]$switch, [string]$log, [int]$expectedExit = 0) {
+function Invoke-SelfTest([string]$switch, [string]$log, [int]$expectedExit = 0, [string]$minimumRuntime = "") {
     $arguments = @($switch, "`"$log`"", "--self-test-data", "`"$data`"")
+    if ($minimumRuntime) { $arguments += @("--self-test-minimum-runtime", $minimumRuntime) }
     if ($switch -eq "--self-test-flow") { $arguments += @("--self-test-diagnostics-port", "$diagnosticsPort") }
     if ($switch -eq "--self-test-flow" -and $PerformanceRoot) {
         $arguments += @("--self-test-performance-root", "`"$((Resolve-Path $PerformanceRoot).Path)`"")
@@ -73,4 +74,12 @@ try {
     Invoke-SelfTest "--self-test" (Join-Path $evidence "missing-runtime.log") 3
 } finally {
     $env:WEBVIEW2_BROWSER_EXECUTABLE_FOLDER = $previousRuntime
+}
+
+# Exercise the real installed version against a forced higher policy floor.
+# This verifies the pre-UI rejection path without claiming an old Runtime was installed.
+$oldLog = Join-Path $evidence "runtime-below-policy.log"
+Invoke-SelfTest "--self-test" $oldLog 3 "999.0.0.0"
+if (-not (Select-String -Path $oldLog -Pattern "FAIL WebView2 Runtime unsupported; required 999.0.0.0" -SimpleMatch)) {
+    throw "The installed Runtime was not rejected by the version policy"
 }

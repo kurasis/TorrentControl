@@ -151,7 +151,8 @@ private:
     nlohmann::json creation_settings_issues_locked() const;
     nlohmann::json validate_draft_locked() const;
     void emit(nlohmann::json event);
-    void save_settings_locked() const;
+    // Persist a candidate before committing it to the live application model.
+    void save_settings_locked(AppSettings const& candidate) const;
 
     Options options_;
     EventSink sink_;

@@ -840,3 +840,55 @@ TEST_CASE("unexpected verification exceptions fail only their job and release th
     CHECK(jobs.find(good)->state == JobState::Succeeded);
     CHECK_FALSE(jobs.has_active());
 }
+
+TEST_CASE("failed settings writes leave preferences profiles and draft unchanged", "[service][settings]")
+{
+    bool const parent_failure = GENERATE(true, false);
+    Harness h;
+    auto const saved = h.app->save_custom_profile("Existing profile");
+    auto const before_settings = h.app->settings_json();
+    auto const before_profiles = h.app->profiles_json();
+    auto const before_draft = h.app->draft_json();
+    auto const folder = h.dir.path() / "settings";
+    auto const file = folder / "settings.json";
+    auto const backup = h.dir.path() / "settings-backup";
+    std::string const original = tc::test::read_all(file);
+    if (parent_failure) {
+        fs::rename(folder, backup);
+        tc::test::write_file(folder, 8);
+    } else {
+        fs::rename(file, backup);
+        fs::create_directory(file);
+        tc::test::write_file(file / "keep", 8);
+    }
+    for (int operation = 0; operation != 4; ++operation) {
+        INFO("operation " << operation << ", parent failure " << parent_failure);
+        try {
+            if (operation == 0) h.app->update_settings({{"theme", "dark"}, {"maxConcurrentJobs", 2}});
+            else if (operation == 1) h.app->save_custom_profile("Not saved");
+            else if (operation == 2) h.app->delete_custom_profile(saved["id"]);
+            else h.app->apply_profile("private", std::nullopt);
+            FAIL("save must fail");
+        } catch (ServiceError const& error) {
+            CHECK(error.code() == "SETTINGS_WRITE_FAILED");
+            CHECK(error.retryable());
+        }
+        CHECK(h.app->settings_json() == before_settings);
+        CHECK(h.app->profiles_json() == before_profiles);
+        CHECK(h.app->draft_json() == before_draft);
+        CHECK(tc::test::read_all(parent_failure ? backup / "settings.json" : backup) == original);
+        if (!parent_failure)
+            for (auto const& entry : fs::directory_iterator(folder))
+                CHECK(entry.path().extension() != ".tmp");
+    }
+    if (parent_failure) { fs::remove(folder); fs::rename(backup, folder); }
+    else { fs::remove_all(file); fs::rename(backup, file); }
+    h.app->update_settings({{"theme", "dark"}});
+    CHECK(load_settings(file).theme == "dark");
+    auto const retry = h.app->save_custom_profile("Retry");
+    CHECK(load_settings(file).custom_profiles.size() == 2);
+    h.app->delete_custom_profile(retry["id"]);
+    CHECK(load_settings(file).custom_profiles.size() == 1);
+    h.app->apply_profile("private", std::nullopt);
+    CHECK(load_settings(file).last_profile == "private");
+}
