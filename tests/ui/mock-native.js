@@ -174,8 +174,11 @@
       nextJobsOffset: config.pagedJobs && jobs.length > 50 ? 50 : null,
       jobsTotal: jobs.length, jobsRevision: "1", settings, profiles: config.modelPaging ? profiles.slice(0, 50) : profiles, profilesTotal: profiles.length, profilesRevision: "0", torrent, editorPreview, diagnostics: diagnosticRun ? [diagnosticRun] : [] };
     },
-    getJobsPage: (p) => ({ jobs: jobs.slice(p.offset, p.offset + p.limit), total: jobs.length, collectionRevision: "1",
-      nextOffset: p.offset + p.limit < jobs.length ? p.offset + p.limit : null }),
+    getJobsPage: (p) => {
+      const limit = Math.min(p.limit, config.jobPageLimit ?? 50);
+      return { jobs: jobs.slice(p.offset, p.offset + limit), total: jobs.length, collectionRevision: "1",
+        nextOffset: p.offset + limit < jobs.length ? p.offset + limit : null };
+    },
     getJobSummary: (p) => {
       const job = jobs.find((row) => row.id === p.jobId);
       if (!job) throw Object.assign(new Error("No such job"), { code: "JOB_NOT_FOUND" });

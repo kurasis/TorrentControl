@@ -58,7 +58,7 @@ class Workflow:
 
 
 class TreeMonitor:
-    def __init__(self, pid, phase=lambda: 'workflow', interval=0.05):
+    def __init__(self, pid, phase=lambda: 'workflow', interval=0.05, root_resources=False):
         root = psutil.Process(pid)
         self.root = (pid, root.create_time())
         self.known = {self.root: root}
@@ -68,6 +68,8 @@ class TreeMonitor:
         self.samples = []
         self.errors = []
         self.races = 0
+        self.root_resources = root_resources
+        self.resource_denials = []
         self.started = time.monotonic()
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -77,6 +79,7 @@ class TreeMonitor:
         return self
 
     def _sample(self):
+        self._resolve_resource_denials()
         # Remember identities after discovery, so reparented children remain
         # included and a reused PID can never become part of this workload.
         for identity, process in list(self.known.items()):
@@ -105,8 +108,15 @@ class TreeMonitor:
                 resident += info.rss
                 if identity == self.root:
                     root_resident = info.rss
-                    root_threads = process.num_threads()
-                    root_handles = process.num_handles() if os.name == 'nt' else process.num_fds()
+                    if self.root_resources:
+                        try:
+                            root_threads = process.num_threads()
+                            root_handles = process.num_handles() if os.name == 'nt' else process.num_fds()
+                        except psutil.AccessDenied:
+                            # Linux /proc/PID/fd can deny access during exit.
+                            # Resolve next sweep (or finish), never suppress a
+                            # denial for a process that remains alive.
+                            self.resource_denials.append((identity, process))
                 private += getattr(info, 'private', 0)
                 count += 1
                 if os.name != 'nt':
@@ -135,11 +145,26 @@ class TreeMonitor:
         except Exception as error:
             self.errors.append(str(error))
 
+    def _resolve_resource_denials(self):
+        pending, self.resource_denials = self.resource_denials, []
+        for identity, process in pending:
+            try:
+                gone = not process.is_running() or process.create_time() != identity[1] or process.status() == psutil.STATUS_ZOMBIE
+            except (psutil.NoSuchProcess, psutil.ZombieProcess):
+                gone = True
+            except psutil.AccessDenied:
+                gone = False
+            if gone:
+                self.races += 1
+            else:
+                self.errors.append(f'Cannot read root thread/handle counts of live process {identity[0]}')
+
     def finish(self):
         self.stop.set()
         self.thread.join(timeout=10)
         if self.thread.is_alive():
             raise RuntimeError('Process-tree sampler did not stop')
+        self._resolve_resource_denials()
         if not self.samples or self.errors:
             raise RuntimeError(f'Incomplete process-tree evidence: {self.errors[:5]}')
         phases = {}

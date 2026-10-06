@@ -36,7 +36,7 @@ export async function runSessionFlow(actions, state) {
       const result = await request("sessionFinish");
       result.elapsedMs = performance.now() - began;
       await actions.firstJobsPage();
-      check(state.jobHistory.ids.length === 50 && state.jobHistory.offset === 0, "First history page missing");
+      check(state.jobHistory.ids.length > 0 && state.jobHistory.ids.length <= 50 && state.jobHistory.offset === 0, "First history page missing");
       const pinned = state.jobHistory.ids[0]; actions.selectJob(pinned);
       actions.setTab("jobs");
       await actions.loadJobsPage(450);
@@ -46,12 +46,14 @@ export async function runSessionFlow(actions, state) {
       check(verifiedFiles?.total === 32 && verifiedFiles.rows.length === 32, "Native verification detail page missing");
       const layout = await actions.jobLayoutPage(pinned, 0, 50);
       check(layout?.total >= 32, "Native creation layout page missing");
+      const nextOffset = state.jobHistory.nextOffset;
+      check(nextOffset > 450, "Middle history cursor did not advance");
       await actions.nextJobsPage();
-      check(state.jobHistory.offset === 500, "Next history cursor was lost");
+      check(state.jobHistory.offset === nextOffset, "Next history cursor was lost");
       await actions.previousJobsPage();
       check(state.jobHistory.offset === 450, "Previous history cursor was lost");
       await actions.latestJobsPage();
-      check(state.jobHistory.offset === 950 && state.jobHistory.ids.length === 50, "Latest history page missing");
+      check(state.jobHistory.ids.length > 0 && state.jobHistory.offset + state.jobHistory.ids.length === 1000, "Latest history page missing");
       const completed = await checkpoint(`${format}-completed`);
       check(completed.jobs === 1000 && completed.createSpecs === 0 && completed.verifySpecs === 0, "Completed input retention");
       await actions.clearFinished(); await actions.reloadSnapshot();

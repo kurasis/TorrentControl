@@ -39,15 +39,15 @@ public:
         auto result = app.retention_summary();
         if (result.at("jobs") != 1000 || result.at("succeeded") != 1000 || result.at("created") != 700
             || result.at("verified") != 300 || result.at("failed") != 0 || result.at("cancelled") != 0)
-            throw std::runtime_error("The 1000-job session did not complete the expected real work");
+            throw std::runtime_error("The 1000-job session did not complete the expected real work: " + result.dump());
         for (auto const* key : {"createSpecs", "verifySpecs", "inputManifestEntries", "verifyInputBytes", "jobThreads", "running"})
             if (result.at(key) != 0) throw std::runtime_error(std::string("Completed session retained ") + key);
         if (result.at("workers").get<std::size_t>() > 8) throw std::runtime_error("Session worker pool exceeded its bound");
         // Results must remain readable after the frozen inputs have been released.
         for (std::size_t offset : {0u, 450u, 950u}) {
             auto const page = app.jobs().bridge_page(offset, 50);
-            if (page.at("jobs").size() != 50 || page.at("total") != 1000)
-                throw std::runtime_error("Session history page was lost");
+            if (page.at("jobs").empty() || page.at("jobs").size() > 50 || page.at("total") != 1000)
+                throw std::runtime_error("Session history page was lost at " + std::to_string(offset));
             auto const& job = page.at("jobs").at(0);
             auto const id = job.at("id").get<std::string>();
             if (app.jobs().text_page(id, "log", 0, 50).at("rows").empty())

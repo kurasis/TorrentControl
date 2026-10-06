@@ -47,6 +47,8 @@ load native pages; Next follows the byte-budget cursor and Previous stores at
 most 64 visited offsets. Collection revisions prevent mixing changed pages,
 with three read attempts and no replay of mutations. Newer events win over
 older page replies. Off-page terminal events still resolve completion watches.
+Latest falls back to the final row when the native byte budget shortens its
+50-row window, keeping the newest job reachable without loading all history.
 
 ## Checks and evidence
 
@@ -65,6 +67,10 @@ Clear, including cleared-memory drift. Normal exit must leave no sampled
 WebView2 descendants. The independent Python verifier checks six archived
 create/batch outputs per mode; GUI/headless bytes must match. Source hashes
 must be unchanged and temporary output files absent.
+Root resource probes are enabled specifically for these sessions. A permission
+denial is deferred to the next sweep/end to distinguish process exit from a
+live inaccessible process; a live denial still fails the measurement. Controls
+exercise both cases, as well as real child/grandchild residency and reparenting.
 
 RSS sums can count shared pages multiple times. Sampling sweeps are not atomic
 and can miss peaks; phase boundaries can include a sweep begun in the preceding
@@ -90,7 +96,7 @@ The checked-in [local Linux report](evidence/long-session/linux-local.json)
 documents this fixture; Windows evidence comes from CI, not Linux emulation.
 The [pre-fix diagnostics](evidence/long-session/linux-before.json) cover one
 1000-job v1 cycle, without a pre-fix GUI or OS-memory claim. Local validation
-passed 170 CTest cases, 50 Chromium UI cases, the sampler control and both
+passed 170 CTest cases, 52 Chromium UI cases, both sampler controls and both
 workflow fault controls.
 The final local cleared-phase peaks were 118,603,776 / 127,549,440 / 127,582,208
 resident bytes; root file-descriptor peaks were 3 / 3 / 3. These are observations

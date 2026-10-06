@@ -438,7 +438,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
                 state->service->jobs().wait_idle(); return nlohmann::json{{"joined", true}};
             });
             app.dispatcher.register_operation("sessionFinish", [state, session](nlohmann::json const&) {
-                return session->finish_cycle(*state->service);
+                try { return session->finish_cycle(*state->service); }
+                catch (std::exception const& error) {
+                    write_self_test_log(*state, "SESSION_FAILURE " + std::string(error.what()));
+                    throw tc::bridge::BridgeError("SELF_TEST", error.what());
+                }
             });
             app.dispatcher.register_operation("sessionCheckpoint", [state, window](nlohmann::json const& p) {
                 auto result = state->service->retention_summary();

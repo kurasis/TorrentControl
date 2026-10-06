@@ -25,7 +25,7 @@ def headless(executable, config, folder):
     checkpoints, cycles = [], []
     with (folder / 'stderr.log').open('w', encoding='utf-8') as error:
         workflow = Workflow(executable, config, error)
-        monitor = TreeMonitor(workflow.process.pid, lambda: phase).start()
+        monitor = TreeMonitor(workflow.process.pid, lambda: phase, root_resources=True).start()
         def checkpoint(name):
             nonlocal phase
             phase = name
@@ -79,7 +79,7 @@ def gui(executable, config, folder):
         return phase
     process = subprocess.Popen([str(executable), '--self-test', str(log), '--self-test-data', str(folder / 'data'),
                                 '--self-test-session', str(fixture)])
-    monitor = TreeMonitor(process.pid, current_phase).start()
+    monitor = TreeMonitor(process.pid, current_phase, root_resources=True).start()
     try:
         assert process.wait(timeout=620) == 0, log.read_text(encoding='utf-8') if log.exists() else 'No GUI log'
         deadline = time.monotonic() + 15

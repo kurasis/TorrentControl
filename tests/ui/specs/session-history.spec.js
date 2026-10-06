@@ -60,4 +60,39 @@ test.describe("bounded long-session history", () => {
     });
     expect(completed).toEqual([false, false, 51]);
   });
+  test("Latest includes the final row when native byte budgets shorten pages", async ({ page }) => {
+    await page.goto("/index.html");
+    await expect(page.locator("#job-list")).toContainText("History-3000");
+    await page.evaluate(async () => {
+      window.__mock.config.jobPageLimit = 17;
+      const { actions } = await import("/app.js");
+      await actions.reloadSnapshot();
+    });
+    await expect(page.locator("#job-list > li")).toHaveCount(1);
+    await expect(page.locator("#job-list")).toContainText("History-3000");
+    await page.locator("#jobs-first").click();
+    await expect(page.locator("#job-list > li")).toHaveCount(17);
+    await expect(page.locator("#job-list")).toContainText("History-17");
+    await page.locator("#jobs-next").click();
+    await expect(page.locator("#job-list")).toContainText("History-18");
+    await page.locator("#jobs-previous").click();
+    await expect(page.locator("#job-list")).toContainText("History-1");
+    await page.locator("#jobs-latest").click();
+    await expect(page.locator("#job-list > li")).toHaveCount(1);
+    await expect(page.locator("#job-list")).toContainText("History-3000");
+  });
+  test("awaited user navigation completes before the background refresh resumes", async ({ page }) => {
+    await page.goto("/index.html");
+    await expect(page.locator("#job-list")).toContainText("History-3000");
+    const offset = await page.evaluate(async () => {
+      const { actions, state } = await import("/app.js");
+      window.__mock.config.responseDelay = (message) => message.operation === "getJobsPage" ? 100 : 0;
+      window.__mock.emit("job", { job: { id: "new-during-navigation", name: "Queued during navigation", kind: "create", state: "Queued", version: "1", bytesDone: "0", bytesTotal: "1", log: [] } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await actions.firstJobsPage();
+      return state.jobHistory.offset;
+    });
+    expect(offset).toBe(0);
+    await expect(page.locator("#job-list")).toContainText("History-1");
+  });
 });

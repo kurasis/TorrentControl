@@ -614,15 +614,28 @@ function applyJobsPage(page, offset, beforeVersions) {
   invalidate("jobs", "workspace");
 }
 
+let jobReadsInFlight = 0;
 async function loadJobsPage(requested) {
+  ++jobReadsInFlight;
+  try { return await readJobsPage(requested); }
+  finally { --jobReadsInFlight; }
+}
+
+async function readJobsPage(requested) {
   const history = state.jobHistory;
   const serial = ++history.serial;
   if (requested !== undefined) { history.followNewest = false; history.offsetIntent = requested; }
   for (let attempt = 0; attempt < 3; ++attempt) {
     const beforeVersions = new Map([...state.jobs].map(([id, job]) => [id, job.version]));
     const meta = await request("getJobsPage", { offset: 0, limit: 0 });
-    const offset = Math.min(requested ?? (history.followNewest ? Math.max(0, meta.total - 50) : history.offsetIntent ?? history.offset), Math.max(0, meta.total - 1));
-    const page = await request("getJobsPage", { offset, limit: 50 });
+    let offset = Math.min(requested ?? (history.followNewest ? Math.max(0, meta.total - 50) : history.offsetIntent ?? history.offset), Math.max(0, meta.total - 1));
+    let page = await request("getJobsPage", { offset, limit: 50 });
+    if (history.followNewest && page.nextOffset !== null) {
+      // A byte-budget page can stop before the final job. Latest must include
+      // the actual tail; First/Next still traverse every intervening row.
+      offset = Math.max(0, page.total - 1);
+      page = await request("getJobsPage", { offset, limit: 50 });
+    }
     if (serial !== history.serial) return;
     if (page.collectionRevision !== meta.collectionRevision) continue;
     applyJobsPage(page, offset, beforeVersions);
@@ -631,7 +644,11 @@ async function loadJobsPage(requested) {
   throw new Error("Jobs changed while reading this page; try again");
 }
 
-const refreshJobsSoon = debounce(() => { if (jobEventSerial > readJobEventSerial) actions.loadJobsPage(); }, 150);
+const refreshJobsSoon = debounce(() => {
+  if (jobEventSerial <= readJobEventSerial) return;
+  if (jobReadsInFlight) refreshJobsSoon();
+  else actions.loadJobsPage();
+}, 150);
 
 function reportBatches() {
   for (const [first, ids] of state.batchJobs) {
@@ -688,6 +705,12 @@ function applySettings() {
 }
 
 async function refresh() {
+  ++jobReadsInFlight;
+  try { await readSnapshot(); }
+  finally { --jobReadsInFlight; }
+}
+
+async function readSnapshot() {
   let snap;
   let beforeVersions;
   let page, offset;
@@ -700,6 +723,10 @@ async function refresh() {
     offset = Math.min(history.followNewest ? Math.max(0, total - 50) : history.offsetIntent ?? history.offset, Math.max(0, total - 1));
     page = offset === 0 ? { jobs: snap.jobs.slice(0, 50), total, nextOffset: snap.nextJobsOffset ?? null, collectionRevision: snap.jobsRevision }
       : await request("getJobsPage", { offset, limit: 50 });
+    if (history.followNewest && page.nextOffset !== null) {
+      offset = Math.max(0, total - 1);
+      page = await request("getJobsPage", { offset, limit: 50 });
+    }
     if (page.collectionRevision === snap.jobsRevision) break;
     snap = null;
   }
