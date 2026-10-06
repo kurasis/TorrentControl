@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tc/bridge/protocol.hpp"
+#include "tc/bridge/async_dispatcher.hpp"
 
 #include <windows.h>
 // WIN32_LEAN_AND_MEAN (set project-wide) leaves out the COM headers that
@@ -40,6 +41,7 @@ public:
     };
 
     WebViewHost(HWND window, Options options, bridge::Dispatcher const& dispatcher);
+    ~WebViewHost();
     WebViewHost(WebViewHost const&) = delete;
     WebViewHost& operator=(WebViewHost const&) = delete;
 
@@ -52,9 +54,7 @@ public:
     // Invoked only by an operation registered for --self-test-flow.
     HRESULT crash_renderer_for_self_test();
 
-    // Answers the bridge requests queued since the last call. Requests are not
-    // handled inside the WebView2 callback because handlers may show modal
-    // dialogs; the window procedure calls this on wm_bridge_request.
+    // Delivers worker replies on the STA thread, outside WebView2 callbacks.
     void process_requests();
     // Sends a serialized event to the page; dropped while no page is loaded.
     void post_to_page(std::string const& message);
@@ -79,9 +79,8 @@ private:
     wil::com_ptr<ICoreWebView2Environment> environment_;
     wil::com_ptr<ICoreWebView2Controller> controller_;
     wil::com_ptr<ICoreWebView2> webview_;
-    std::deque<PendingRequest> pending_;
-    bool processing_ = false;
     std::uint64_t page_generation_ = 0;
+    std::unique_ptr<bridge::AsyncDispatcher> commands_;
 };
 
 } // namespace tc::app

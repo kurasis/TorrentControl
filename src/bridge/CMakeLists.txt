@@ -1,6 +1,7 @@
 # CommandBridge: versioned message contract between the WebView2 frontend and
 # the native host. Platform independent so validation is unit-tested headlessly.
 add_library(tc_bridge
+    src/async_dispatcher.cpp
     src/app_operations.cpp
     src/bencode_json.cpp
     src/protocol.cpp

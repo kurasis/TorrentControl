@@ -39,6 +39,19 @@ std::string serialize(json const& j)
 
 } // namespace
 
+std::string reject_request(std::string_view message, std::string code, std::string reason, bool retryable)
+{
+    json id = nullptr;
+    if (message.size() <= max_message_bytes) {
+        auto request = json::parse(message, nullptr, false);
+        if (request.is_object()) {
+            auto it = request.find("requestId");
+            if (it != request.end() && it->is_string() && valid_request_id(it->get<std::string>())) id = *it;
+        }
+    }
+    return serialize(error_response(std::move(id), std::move(code), std::move(reason), retryable));
+}
+
 bool is_allowed_source(std::string_view source_uri, std::string_view origin)
 {
     if (source_uri.size() <= origin.size()) return false;

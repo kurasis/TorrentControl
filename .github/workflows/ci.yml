@@ -91,7 +91,7 @@ jobs:
         run: ctest --preset windows-x64-release
 
       - name: Native bridge benchmark (100000 real files)
-        run: python tests/performance/native_bridge.py --proof build/windows-x64-release/tools/tc-proof/tc-native-proof.exe --report build/performance/windows-native.json
+        run: python tests/performance/native_bridge.py --proof build/windows-x64-release/tools/tc-proof/tc-native-proof.exe --report build/performance/windows-native.json --fixture-root build/performance/fixture
 
       - name: Upload native benchmark
         if: always()
@@ -103,7 +103,7 @@ jobs:
 
       - name: Windows dialogs, WebView2 workflow and renderer recovery
         shell: pwsh
-        run: ./tests/windows/run-native-flow.ps1
+        run: ./tests/windows/run-native-flow.ps1 -PerformanceRoot build/performance/fixture
 
       - name: Upload native Windows evidence
         if: always()

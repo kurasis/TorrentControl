@@ -4,8 +4,8 @@
 // 9.3, 13 and 14). Platform independent: the Windows host supplies dialogs and
 // shell actions, and the bridge maps operations onto these methods.
 //
-// Threading: public methods may be called from the UI thread; scanning and
-// jobs run on worker threads. Events are delivered through the sink from any
+// Threading: the Windows command worker calls public methods; scanning and
+// jobs have their own workers. Events are delivered through the sink from any
 // thread, and the host marshals them to the UI thread.
 
 #include "tc/core/metainfo.hpp"
