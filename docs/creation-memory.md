@@ -39,7 +39,13 @@ the high-water counter can retain the subprocess's pre-exec RSS baseline.
 These results exclude WebView2, driver and other process-tree memory. Resource
 estimates remain rough planning estimates, not upper bounds on native metadata
 allocations; the measurements show overhead beyond those estimates. Whole
-application process-tree profiling and tighter metadata estimates remain open.
+application process-tree profiling is supplied by the next package; tighter
+metadata estimates and long-session job-history measurements remain open.
+
+The [process-tree evidence package](process-memory-smb.md) adds fresh-process
+AppService measurements and paired real WebView2/headless workflows, including
+all discovered child processes. Sampling and native-model limits are documented
+separately; tighter metadata estimates remain open.
 
 ```sh
 python3 tests/performance/creation_memory.py \

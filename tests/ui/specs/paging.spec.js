@@ -5,6 +5,37 @@ test.describe("job snapshot pagination", () => {
     id: "job-" + (i + 1), name: "Recovered-" + (i + 1), kind: "verify", state: "Failed", version: "1",
     bytesDone: "0", bytesTotal: "0", filesDone: 0, filesTotal: 0, log: Array.from({ length: 45 }, (_, line) => "Log-" + line),
   })) };` });
+  test("a complete snapshot releases native-cleared job history", async ({ page }) => {
+    await page.goto("/index.html");
+    await expect(page.locator("#job-list")).toContainText("Recovered-73");
+    await page.evaluate(async () => {
+      const { request } = await import("/bridge.js");
+      await request("clearFinishedJobs");
+      const { actions } = await import("/app.js");
+      await actions.reloadSnapshot();
+    });
+    await expect.poll(() => page.evaluate(async () => { const { state } = await import("/app.js"); return state.jobs.size; })).toBe(0);
+    await expect(page.locator("#jobs-panel")).not.toContainText("Recovered-73");
+  });
+  test("snapshot reconciliation retains a new job event received during the read", async ({ page }) => {
+    await page.goto("/index.html");
+    await expect(page.locator("#job-list")).toContainText("Recovered-73");
+    await page.evaluate(async () => {
+      const { request } = await import("/bridge.js");
+      await request("clearFinishedJobs");
+      const original = window.__mock.ops.getSnapshot;
+      window.__mock.ops.getSnapshot = () => {
+        const snapshot = original();
+        window.__mock.emit("job", { job: { id: "job-new", name: "New during snapshot", kind: "create", state: "Queued",
+          version: "1", bytesDone: "0", bytesTotal: "0", filesDone: 0, filesTotal: 0, log: [] } });
+        return snapshot;
+      };
+      const { actions } = await import("/app.js");
+      await actions.reloadSnapshot();
+    });
+    await expect(page.locator("#job-list")).toContainText("New during snapshot");
+    await expect.poll(() => page.evaluate(async () => { const { state } = await import("/app.js"); return [...state.jobs.keys()]; })).toEqual(["job-new"]);
+  });
   test("recovers jobs beyond the first page without replaying mutations", async ({ page }) => {
     await page.goto("/index.html");
     await expect(page.locator("#job-list")).toContainText("Recovered-73");

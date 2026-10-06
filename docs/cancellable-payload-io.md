@@ -68,3 +68,9 @@ creation when the runner exposes its administrative share; a missing share
 is explicitly skipped. Real remote SMB fault injection, delayed opens and
 storage-driver stalls remain release gates. These tests do not establish a
 universal two-second deadline for UNC or every filesystem operation.
+
+The [process-tree and SMB package](process-memory-smb.md) adds real TCP/SMB
+fault injection through Linux kernel CIFS and an isolated Samba peer. It
+checks stalled reads/opens, cancellation with retained resources, disconnect
+failure, output preservation and a healthy retry. Remote Windows SMB and
+arbitrary driver stalls remain open; the Linux fixture does not close them.

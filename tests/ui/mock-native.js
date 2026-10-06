@@ -176,6 +176,11 @@
     },
     getJobsPage: (p) => ({ jobs: jobs.slice(p.offset, p.offset + p.limit), total: jobs.length, collectionRevision: "1",
       nextOffset: p.offset + p.limit < jobs.length ? p.offset + p.limit : null }),
+    clearFinishedJobs: () => {
+      for (let i = jobs.length - 1; i >= 0; --i)
+        if (/^(Succeeded|SucceededWithWarnings|Failed|Cancelled)$/.test(jobs[i].state)) jobs.splice(i, 1);
+      return {};
+    },
     getVerifyFilesPage: (p) => {
       const total = p.errorsOnly ? (config.verifyErrors ?? 0) : (config.verifyFiles ?? 0);
       return { total, rows: Array.from({ length: Math.min(p.limit, Math.max(0, total - p.offset)) }, (_, i) => {
@@ -319,7 +324,7 @@
     requests.push({ operation: message.operation, payload: message.payload, attached: attached?.length ?? 0 });
     const reply = (body) => {
       const data = JSON.stringify({ protocolVersion: 1, requestId: message.requestId, ...body });
-      setTimeout(() => listeners.forEach((l) => l({ data })), 0);
+      setTimeout(() => listeners.forEach((l) => l({ data })), config.responseDelay?.(message) ?? 0);
     };
     const op = ops[message.operation];
     if (!op) return reply({ ok: false, error: { code: "UNKNOWN_OPERATION", message: message.operation, retryable: false } });

@@ -57,7 +57,11 @@ function flush() {
   frame = 0;
   if (dirty.workspace) {
     const key = workspaceKey(state);
-    if (key !== lastWorkspaceKey) {
+    // Native scan/validation events must not detach a row before its blur
+    // commits the typed value. Keep the old render key; blur invalidates again.
+    const active = document.activeElement;
+    const editingRow = active?.dataset.rowDirty === "true" && $("workspace").contains(active);
+    if (key !== lastWorkspaceKey && !editingRow) {
       lastWorkspaceKey = key;
       preserveFocus($("workspace"), () => renderWorkspace($("workspace"), state, actions));
     }
@@ -589,7 +593,9 @@ function applySettings() {
 
 async function refresh() {
   let snap;
+  let beforeVersions;
   for (let attempt = 0; attempt < 3; ++attempt) {
+    beforeVersions = new Map([...state.jobs].map(([id, job]) => [id, job.version]));
     snap = await request("getSnapshot");
     let next = snap.nextJobsOffset;
     let consistent = true;
@@ -621,6 +627,16 @@ async function refresh() {
     state.tab = "expert";
     await loadMetadata(state, invalidate);
   } else state.editor = null;
+  const nativeIds = new Set(snap.jobs.map((job) => job.id));
+  for (const [id, job] of state.jobs) {
+    // A complete snapshot removes native-cleared rows. Preserve jobs whose
+    // events arrived after this read began, including newly queued jobs.
+    if (!nativeIds.has(id) && beforeVersions.has(id) && beforeVersions.get(id) === job.version) {
+      state.jobs.delete(id);
+      state.watchResult.delete(id);
+    }
+  }
+  if (!state.jobs.has(state.selectedJob)) state.selectedJob = null;
   for (const job of snap.jobs) onJob(job);
   state.pendingFields.clear();
   applySettings();
@@ -672,6 +688,11 @@ async function start() {
     const info = await request("getEngineInfo");
     await refresh();
     if (selfTest) {
+      if (new URLSearchParams(location.search).get("memoryFlow") === "1") {
+        const { runMemoryFlow } = await import("./memory-self-test.js");
+        await request("reportSelfTest", { ok: true, ...await runMemoryFlow(actions, state) });
+        return;
+      }
       if (new URLSearchParams(location.search).get("nativeFlow") === "1") {
         const { runNativeFlow } = await import("./windows-self-test.js");
         const result = await runNativeFlow(actions, state, info);

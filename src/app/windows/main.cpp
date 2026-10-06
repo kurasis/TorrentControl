@@ -13,6 +13,7 @@
 #include "self_test.hpp"
 #include "webview_host.hpp"
 #include "../runtime_policy.hpp"
+#include "../../../tools/tc-proof/workflow_fixture.hpp"
 
 #include "tc/bridge/app_operations.hpp"
 #include "tc/bridge/protocol.hpp"
@@ -273,6 +274,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     std::optional<std::wstring> self_test_data;
     std::optional<std::wstring> performance_root;
     std::optional<std::string> self_test_minimum_runtime;
+    std::optional<std::wstring> memory_fixture;
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i < argc; ++i) {
@@ -285,6 +287,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         else if (arg == L"--self-test-diagnostics-port" && i + 1 < argc) diagnostics_port = _wtoi(argv[++i]);
         else if (arg == L"--self-test-performance-root" && i + 1 < argc) performance_root = argv[++i];
         else if (arg == L"--self-test-minimum-runtime" && i + 1 < argc) self_test_minimum_runtime = tc::app::to_utf8(argv[++i]);
+        else if (arg == L"--self-test-memory" && i + 1 < argc) memory_fixture = argv[++i];
     }
     LocalFree(argv);
     bool const self_test = app.self_test_log.has_value();
@@ -367,6 +370,24 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
                 return state->ui->invoke([&] { return handler(payload); });
             });
         };
+        if (memory_fixture) {
+            auto const input = nlohmann::json::parse(tc::service::read_small_file(std::filesystem::path(*memory_fixture)));
+            app.dispatcher.register_operation("prepareSelfTestMemory", [state, input](nlohmann::json const&) {
+                return tc::proof::prepare_fixture(*state->service, input);
+            });
+            app.dispatcher.register_operation("memorySelfTestCheckpoint", [state](nlohmann::json const& p) {
+                std::string const phase = p.at("phase");
+                if (phase != "idle" && phase != "scan" && phase != "review" && phase != "create"
+                    && phase != "completed" && phase != "cleared")
+                    throw tc::bridge::BridgeError("SELF_TEST", "Invalid memory phase");
+                write_self_test_log(*state, "MEMORY " + phase);
+                return nlohmann::json::object();
+            });
+            app.dispatcher.register_operation("joinSelfTestMemory", [state](nlohmann::json const&) {
+                state->service->jobs().wait_idle();
+                return nlohmann::json{{"joined", true}};
+            });
+        }
         if (native_flow) {
             app.dispatcher.register_operation("prepareSelfTestDiagnostics", [state, diagnostics_port](nlohmann::json const&) {
                 if (diagnostics_port < 1 || diagnostics_port > 65535)
@@ -465,14 +486,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
             PostMessageW(window, WM_CLOSE, 0, 0);
             return nlohmann::json::object();
         });
-        SetTimer(hwnd, self_test_timer, self_test_timeout_ms, nullptr);
+        SetTimer(hwnd, self_test_timer, memory_fixture ? 600'000 : self_test_timeout_ms, nullptr);
     }
 
     tc::app::WebViewHost::Options options;
     options.asset_dir = executable_dir() + L"\\frontend";
     options.browser_executable_folder = runtime_folder;
     options.user_data_dir = data_dir.empty() ? std::wstring() : data_dir + L"\\WebView2";
-    options.start_query = native_flow ? L"?selfTest=1&nativeFlow=1" : self_test ? L"?selfTest=1" : L"";
+    options.start_query = self_test && memory_fixture ? L"?selfTest=1&memoryFlow=1"
+        : native_flow ? L"?selfTest=1&nativeFlow=1" : self_test ? L"?selfTest=1" : L"";
     options.on_renderer_recovery = [&app] {
         ++app.renderer_recoveries;
         write_self_test_log(app, "STEP renderer recovery " + std::to_string(app.renderer_recoveries));
