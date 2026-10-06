@@ -38,8 +38,20 @@ public:
         app.jobs().wait_idle();
         auto result = app.retention_summary();
         if (result.at("jobs") != 1000 || result.at("succeeded") != 1000 || result.at("created") != 700
-            || result.at("verified") != 300 || result.at("failed") != 0 || result.at("cancelled") != 0)
+            || result.at("verified") != 300 || result.at("failed") != 0 || result.at("cancelled") != 0) {
+            result["failures"] = nlohmann::json::array();
+            std::size_t offset = 0;
+            while (result["failures"].size() < 10) {
+                auto const page = app.jobs().bridge_page(offset, 50);
+                for (auto const& job : page.at("jobs")) {
+                    if (job.at("state") == "Failed" || job.at("state") == "Cancelled") result["failures"].push_back(job);
+                    if (result["failures"].size() == 10) break;
+                }
+                if (page.at("nextOffset").is_null()) break;
+                offset = page.at("nextOffset").get<std::size_t>();
+            }
             throw std::runtime_error("The 1000-job session did not complete the expected real work: " + result.dump());
+        }
         for (auto const* key : {"createSpecs", "verifySpecs", "inputManifestEntries", "verifyInputBytes", "jobThreads", "running"})
             if (result.at(key) != 0) throw std::runtime_error(std::string("Completed session retained ") + key);
         if (result.at("workers").get<std::size_t>() > 8) throw std::runtime_error("Session worker pool exceeded its bound");

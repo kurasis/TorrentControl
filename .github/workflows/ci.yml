@@ -101,6 +101,19 @@ jobs:
       - name: Test (unit + headless integration proof)
         run: ctest --preset windows-x64-release
 
+      - name: Long session (3000 real jobs per headless and WebView2 process)
+        run: python tests/performance/session_memory.py --proof build/windows-x64-release/tools/tc-proof/tc-workflow-proof.exe --gui build/windows-x64-release/src/app/windows/TorrentControl.exe --report build/performance/windows-long-session.json
+
+      - name: Upload Windows long-session evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-long-session
+          path: |
+            build/performance/windows-long-session.json
+            build/performance/windows-long-session-details/
+          if-no-files-found: warn
+
       - name: Local payload cancellation and output preservation
         run: python tests/performance/payload_cancellation.py --proof build/windows-x64-release/tools/tc-proof/tc-proof.exe --report build/performance/windows-payload-cancellation.json
 
@@ -125,19 +138,6 @@ jobs:
       - name: Windows SMB faults and native GUI shutdown
         shell: pwsh
         run: ./tests/windows/run-smb-faults.ps1 -DisposableRunner
-
-      - name: Long session (3000 real jobs per headless and WebView2 process)
-        run: python tests/performance/session_memory.py --proof build/windows-x64-release/tools/tc-proof/tc-workflow-proof.exe --gui build/windows-x64-release/src/app/windows/TorrentControl.exe --report build/performance/windows-long-session.json
-
-      - name: Upload Windows long-session evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-long-session
-          path: |
-            build/performance/windows-long-session.json
-            build/performance/windows-long-session-details/
-          if-no-files-found: warn
 
       - name: Upload Windows SMB fault evidence
         if: always()
