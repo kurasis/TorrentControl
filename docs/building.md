@@ -38,8 +38,9 @@ ctest --preset windows-x64-release
 
 The application is `build\windows-x64-release\src\app\windows\TorrentControl.exe`,
 with its `frontend` folder next to it. It needs the Microsoft Edge WebView2
-Runtime (Evergreen); when the Runtime is missing it shows a native message
-offering the official download page.
+Runtime (Evergreen), version 113.0.1774.30 or newer. A missing, unrecognized or
+older Runtime shows a native message offering the official download page.
+Use current Evergreen; see [compatibility and settings persistence](settings-runtime-reliability.md).
 
 `TorrentControl.exe --self-test <log>` loads the UI, checks the real bridge,
 HTML profile dialog, saved-profile reload and manual magnet-copy selection,

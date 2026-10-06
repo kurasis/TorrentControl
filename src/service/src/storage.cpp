@@ -28,8 +28,9 @@ void write_file_atomic(fs::path const& path, std::string_view bytes)
         if (!out) throw CoreError(ErrorCode::OutputWriteFailed, "Cannot write " + core::to_utf8(path));
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
         out.flush();
-        if (!out) {
-            out.close();
+        bool const flushed = static_cast<bool>(out);
+        out.close();
+        if (!flushed || !out) {
             std::error_code ec;
             fs::remove(tmp, ec);
             throw CoreError(ErrorCode::OutputWriteFailed, "Cannot write " + core::to_utf8(path));
@@ -229,7 +230,8 @@ void save_settings(fs::path const& path, AppSettings const& s)
         }
     }
     std::error_code ec;
-    fs::create_directories(path.parent_path(), ec);
+    if (!path.parent_path().empty()) fs::create_directories(path.parent_path(), ec);
+    if (ec) throw CoreError(ErrorCode::OutputWriteFailed, "Cannot create the settings folder", ec.value());
     write_file_atomic(path, j.dump(2));
 }
 

@@ -12,6 +12,7 @@
 #include "host_services.hpp"
 #include "self_test.hpp"
 #include "webview_host.hpp"
+#include "../runtime_policy.hpp"
 
 #include "tc/bridge/app_operations.hpp"
 #include "tc/bridge/protocol.hpp"
@@ -166,12 +167,12 @@ std::optional<std::wstring> installed_runtime_version(std::wstring const& folder
     return result;
 }
 
-int show_runtime_missing(bool quiet)
+int show_runtime_unsupported(bool quiet, std::wstring const& details)
 {
     if (quiet) return 3;
     int const choice = MessageBoxW(nullptr,
-        L"TorrentControl cannot find the Microsoft Edge WebView2 Runtime configured for this application.\n\n"
-        L"Open the official download page now?",
+        (details + L"\n\nInstall or update the Microsoft Edge WebView2 Evergreen Runtime.\n"
+            L"Open the official download page now?").c_str(),
         L"TorrentControl", MB_YESNO | MB_ICONINFORMATION);
     if (choice == IDYES) ShellExecuteW(nullptr, L"open", runtime_download_url, nullptr, nullptr, SW_SHOWNORMAL);
     return 3;
@@ -271,6 +272,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     int diagnostics_port = 0;
     std::optional<std::wstring> self_test_data;
     std::optional<std::wstring> performance_root;
+    std::optional<std::string> self_test_minimum_runtime;
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i < argc; ++i) {
@@ -282,6 +284,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         } else if (arg == L"--self-test-data" && i + 1 < argc) self_test_data = argv[++i];
         else if (arg == L"--self-test-diagnostics-port" && i + 1 < argc) diagnostics_port = _wtoi(argv[++i]);
         else if (arg == L"--self-test-performance-root" && i + 1 < argc) performance_root = argv[++i];
+        else if (arg == L"--self-test-minimum-runtime" && i + 1 < argc) self_test_minimum_runtime = tc::app::to_utf8(argv[++i]);
     }
     LocalFree(argv);
     bool const self_test = app.self_test_log.has_value();
@@ -292,13 +295,25 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
 
     std::wstring const runtime_folder = configured_runtime_folder();
     std::optional<std::wstring> const runtime = installed_runtime_version(runtime_folder);
+    std::string const minimum = self_test && self_test_minimum_runtime
+        ? *self_test_minimum_runtime : std::string(tc::app::minimum_webview_runtime);
     if (!runtime) {
         write_self_test_log(app, "FAIL WebView2 Runtime not found");
-        int const code = show_runtime_missing(self_test);
+        int const code = show_runtime_unsupported(self_test,
+            L"TorrentControl cannot find the WebView2 Runtime configured for this application.\n"
+            L"Required version: " + tc::app::to_wide(minimum) + L" or later.");
         CoUninitialize();
         return code;
     }
     write_self_test_log(app, "runtime " + tc::app::to_utf8(*runtime));
+    if (!tc::app::supports_webview_runtime(tc::app::to_utf8(*runtime), minimum)) {
+        write_self_test_log(app, "FAIL WebView2 Runtime unsupported; required " + minimum);
+        int const code = show_runtime_unsupported(self_test,
+            L"The configured WebView2 Runtime is too old or its version is not recognized.\n"
+            L"Installed version: " + *runtime + L"\nRequired version: " + tc::app::to_wide(minimum) + L" or later.");
+        CoUninitialize();
+        return code;
+    }
 
     tc::bridge::register_core_operations(app.dispatcher, TC_APP_VERSION);
     // Self-tests must not alter the real user's profiles or WebView2 data.

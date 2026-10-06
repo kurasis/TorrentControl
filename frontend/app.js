@@ -378,8 +378,8 @@ export const actions = {
     const r = await guarded(request("updateSettings", { patch }));
     if (r) {
       state.settings = r;
-      applySettings();
     }
+    applySettings(); // Restore selectors to the committed state after a failed save.
   },
   setTab(tab) {
     state.tab = tab;
@@ -482,6 +482,7 @@ function applySettings() {
   else delete document.documentElement.dataset.theme;
   $("theme-select").value = s.theme;
   $("language-select").value = s.language ?? "";
+  $("settings-persistence").hidden = s.persistence !== "memory";
   applyTranslations();
   lastWorkspaceKey = "";
   invalidate();

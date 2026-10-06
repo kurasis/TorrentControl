@@ -219,7 +219,10 @@
       return { profiles };
     },
     exportMagnet: () => ({ magnet: "magnet:?xt=urn:btih:0123456789012345678901234567890123456789&dn=Example" }),
-    updateSettings: (p) => Object.assign(settings, p.patch),
+    updateSettings: (p) => {
+      if (config.settingsSaveError) throw Object.assign(new Error(config.settingsSaveError), { code: "SETTINGS_WRITE_FAILED", retryable: true });
+      return Object.assign(settings, p.patch);
+    },
     startCreate: () => {
       const job = { id: "job-1", kind: "create", name: draft.effectiveName, batchId: "", state: "Queued", bytesDone: "0", bytesTotal: "1048576", bytesPerSecond: 0, currentFile: "", filesDone: 0, filesTotal: config.entries, log: [], version: "1", etaSeconds: null };
       jobs.push(job);
