@@ -1,0 +1,2 @@
+# Benchmark driver only, never bundled with TorrentControl.
+psutil==7.0.0

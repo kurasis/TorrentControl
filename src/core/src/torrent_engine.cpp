@@ -343,9 +343,16 @@ CreateResult create_torrent(Manifest const& manifest, CreateOptions const& optio
         // the identifiers, and libtorrent validates v2 piece layers.
         Metainfo const parsed = Metainfo::parse(result.torrent_bytes);
         lt::error_code ec;
+        // Our parser has already enforced the 64 MiB / 2,000,000-value bound.
+        // libtorrent counts dictionary keys and container end markers too;
+        // at most three of its tokens correspond to one of our value nodes.
+        // The default 3,000,000-token bound rejects valid 100,000-file hybrid
+        // output. This applies only to generated, already bounded metainfo.
+        lt::load_torrent_limits generated_limits;
+        generated_limits.max_decode_tokens = 6'000'000;
         lt::add_torrent_params const loaded = lt::load_torrent_buffer(
             lt::span<char const>(result.torrent_bytes.data(), static_cast<std::ptrdiff_t>(result.torrent_bytes.size())), ec,
-            lt::load_torrent_limits{});
+            generated_limits);
         if (ec || !loaded.ti)
             throw CoreError(ErrorCode::InvalidMetainfo, "Generated metainfo failed engine validation: " + ec.message());
         auto const& ih = loaded.ti->info_hashes();

@@ -105,11 +105,14 @@ with indexed edits preserving unloaded rows.
 
 1. Model paging is implemented; complete native models and some intermediate
    profile/review reports are still retained. Measure and reduce these costs
-   together with whole process-tree and frontend job-history memory.
+   together with long-session frontend job-history memory. The
+   [process-tree package](process-memory-smb.md) adds measured AppService
+   workflows and paired real WebView2/headless process trees.
 2. The [creation memory package](creation-memory.md) enforces payload budgets
    and measures real large-file/tree creation. Whole process-tree memory,
    tighter native metadata estimates remain open. The [payload I/O package](cancellable-payload-io.md)
-   cancels supported pending Windows reads safely; real remote SMB faults,
+   cancels supported pending Windows reads safely. Real Linux CIFS/Samba
+   faults are exercised by the process-tree package; remote Windows SMB faults,
    delayed opens and driver stalls remain separate release gates.
 3. The [BiglyBT hash audit](independent-v2-hash-audit.md) independently checks
    v1 payload pieces, v2 roots and layers, including separate hybrid failure

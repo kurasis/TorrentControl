@@ -41,6 +41,11 @@ estimates remain rough planning estimates, not upper bounds on native metadata
 allocations; the measurements show overhead beyond those estimates. Whole
 application process-tree profiling and tighter metadata estimates remain open.
 
+The [process-tree evidence package](process-memory-smb.md) adds fresh-process
+AppService measurements and paired real WebView2/headless workflows, including
+all discovered child processes. Sampling and native-model limits are documented
+separately; tighter metadata estimates remain open.
+
 ```sh
 python3 tests/performance/creation_memory.py \
   --proof build/linux-release/tools/tc-proof/tc-proof \

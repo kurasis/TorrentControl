@@ -672,6 +672,11 @@ async function start() {
     const info = await request("getEngineInfo");
     await refresh();
     if (selfTest) {
+      if (new URLSearchParams(location.search).get("memoryFlow") === "1") {
+        const { runMemoryFlow } = await import("./memory-self-test.js");
+        await request("reportSelfTest", { ok: true, ...await runMemoryFlow(actions, state) });
+        return;
+      }
       if (new URLSearchParams(location.search).get("nativeFlow") === "1") {
         const { runNativeFlow } = await import("./windows-self-test.js");
         const result = await runNativeFlow(actions, state, info);
