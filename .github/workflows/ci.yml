@@ -122,7 +122,23 @@ jobs:
         shell: pwsh
         run: ./tests/windows/run-native-flow.ps1 -PerformanceRoot build/performance/fixture
 
+      - name: Windows SMB faults and native GUI shutdown
+        shell: pwsh
+        run: ./tests/windows/run-smb-faults.ps1 -DisposableRunner
+
+      - name: Upload Windows SMB fault evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smb-faults
+          path: |
+            build/windows-smb-evidence/**/*.json
+            build/windows-smb-evidence/**/*.log
+            build/windows-smb-evidence/**/*.torrent
+          if-no-files-found: warn
+
       - name: Whole process-tree memory (paired GUI and headless)
+        # The preceding SMB step removes its VM/TAP before these fresh samples.
         run: python tests/performance/workflow_memory.py --proof build/windows-x64-release/tools/tc-proof/tc-workflow-proof.exe --gui build/windows-x64-release/src/app/windows/TorrentControl.exe --report build/performance/windows-process-memory.json
 
       - name: Upload Windows process-tree evidence

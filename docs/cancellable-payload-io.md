@@ -65,12 +65,14 @@ operation settles; shutdown can wait for them. No arbitrary worker is killed.
 
 The kernel fixture is local IPC. Existing Windows integration exercises UNC
 creation when the runner exposes its administrative share; a missing share
-is explicitly skipped. Real remote SMB fault injection, delayed opens and
+is explicitly skipped. Physical remote SMB fault injection and arbitrary
 storage-driver stalls remain release gates. These tests do not establish a
 universal two-second deadline for UNC or every filesystem operation.
 
 The [process-tree and SMB package](process-memory-smb.md) adds real TCP/SMB
 fault injection through Linux kernel CIFS and an isolated Samba peer. It
 checks stalled reads/opens, cancellation with retained resources, disconnect
-failure, output preservation and a healthy retry. Remote Windows SMB and
-arbitrary driver stalls remain open; the Linux fixture does not close them.
+failure, output preservation and a healthy retry. The next
+[Windows SMB package](windows-smb-faults.md) adds the Windows redirector and
+actual GUI shutdown against a private Linux VM peer. Physical remote NAS,
+indefinitely unavailable sources and arbitrary driver stalls remain open.

@@ -14,6 +14,7 @@
 #include "webview_host.hpp"
 #include "../runtime_policy.hpp"
 #include "../../../tools/tc-proof/workflow_fixture.hpp"
+#include "../../../tools/tc-proof/workflow_probe.hpp"
 
 #include "tc/bridge/app_operations.hpp"
 #include "tc/bridge/protocol.hpp"
@@ -44,6 +45,8 @@ constexpr UINT wm_service_events = WM_APP + 2;
 constexpr UINT wm_self_test_crash = WM_APP + 3;
 constexpr UINT wm_ui_tasks = WM_APP + 4;
 constexpr UINT_PTR performance_timer = 3;
+constexpr UINT wm_smb_self_test_control = WM_APP + 5;
+constexpr UINT_PTR smb_self_test_timer = 4;
 
 // Events raised on service worker threads, handed to the UI thread.
 class EventQueue {
@@ -97,6 +100,9 @@ struct AppState {
     std::unique_ptr<tc::app::WindowsHostServices> shell;
     std::unique_ptr<tc::app::NativeSelfTest> native_test;
     int renderer_recoveries = 0;
+    // Outlives the service and every payload reader that references it.
+    std::unique_ptr<tc::proof::WorkflowProbe> smb_probe;
+    std::uint64_t smb_sequence = 0;
     std::unique_ptr<tc::service::AppService> service;
     tc::bridge::Dispatcher dispatcher;
     std::unique_ptr<tc::app::WebViewHost> host;
@@ -117,6 +123,14 @@ void write_self_test_log(AppState const& app, std::string const& line)
     if (!app.self_test_log) return;
     std::ofstream out(std::filesystem::path(*app.self_test_log), std::ios::app);
     out << line << "\n";
+}
+
+void write_smb_self_test_snapshot(AppState& app, LPARAM acknowledgement = 0)
+{
+    if (!app.smb_probe || !app.service) return;
+    auto const page = app.service->jobs().bridge_page(0, 1);
+    write_self_test_log(app, "SMB " + nlohmann::json{{"sequence", ++app.smb_sequence}, {"ack", acknowledgement},
+        {"probe", app.smb_probe->snapshot()}, {"job", page.at("jobs").empty() ? nlohmann::json(nullptr) : page.at("jobs").at(0)}}.dump());
 }
 
 std::wstring executable_dir()
@@ -222,6 +236,13 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
             for (auto const& event : app->events->take()) app->host->post_to_page(app->channel.wrap(event));
         }
         return 0;
+    case wm_smb_self_test_control:
+        // A developer-only hook on the task-owned HWND, absent in normal use.
+        if (app && app->self_test_log && app->smb_probe) {
+            if (wparam == 1) app->smb_probe->release();
+            write_smb_self_test_snapshot(*app, lparam);
+        }
+        return 0;
     case WM_CLOSE:
         // Closing with work in progress asks first (section 14.2); the
         // self-test and fatal errors close without asking.
@@ -232,9 +253,14 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
             if (choice != IDYES) return 0;
             app->service->jobs().cancel_all();
         }
+        if (app && app->smb_probe) write_self_test_log(*app, "SMB_CLOSE_REQUESTED");
         DestroyWindow(hwnd);
         return 0;
     case WM_TIMER:
+        if (wparam == smb_self_test_timer && app && app->smb_probe) {
+            write_smb_self_test_snapshot(*app);
+            return 0;
+        }
         if (wparam == performance_timer && app) {
             auto const now = GetTickCount64();
             app->performance_max_gap = std::max(app->performance_max_gap, now - app->performance_last_tick);
@@ -275,6 +301,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     std::optional<std::wstring> performance_root;
     std::optional<std::string> self_test_minimum_runtime;
     std::optional<std::wstring> memory_fixture;
+    std::optional<std::wstring> smb_fixture;
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i < argc; ++i) {
@@ -288,6 +315,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         else if (arg == L"--self-test-performance-root" && i + 1 < argc) performance_root = argv[++i];
         else if (arg == L"--self-test-minimum-runtime" && i + 1 < argc) self_test_minimum_runtime = tc::app::to_utf8(argv[++i]);
         else if (arg == L"--self-test-memory" && i + 1 < argc) memory_fixture = argv[++i];
+        else if (arg == L"--self-test-smb" && i + 1 < argc) smb_fixture = argv[++i];
     }
     LocalFree(argv);
     bool const self_test = app.self_test_log.has_value();
@@ -343,6 +371,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     app.events = std::make_unique<EventQueue>(hwnd);
     tc::service::AppService::Options service_options;
     if (!data_dir.empty()) service_options.settings_path = std::filesystem::path(data_dir) / L"settings.json";
+    std::optional<nlohmann::json> smb_input;
+    if (self_test && smb_fixture) {
+        smb_input = nlohmann::json::parse(tc::service::read_small_file(std::filesystem::path(*smb_fixture)));
+        app.smb_probe = std::make_unique<tc::proof::WorkflowProbe>();
+        service_options.jobs.payload_factory = [&app] { return std::make_unique<tc::proof::ProbeSource>(*app.smb_probe); };
+    }
     EventQueue* const queue = app.events.get();
     try {
         app.service = std::make_unique<tc::service::AppService>(
@@ -386,6 +420,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
             app.dispatcher.register_operation("joinSelfTestMemory", [state](nlohmann::json const&) {
                 state->service->jobs().wait_idle();
                 return nlohmann::json{{"joined", true}};
+            });
+        }
+        if (smb_input) {
+            app.dispatcher.register_operation("prepareSelfTestSmb", [state, input = *smb_input](nlohmann::json const&) {
+                auto result = tc::proof::prepare_fixture(*state->service, input);
+                state->smb_probe->arm(input.at("site"));
+                return result;
+            });
+            register_ui_operation("smbSelfTestStarted", [state, window](nlohmann::json const&) {
+                if (!SetTimer(window, smb_self_test_timer, 100, nullptr))
+                    throw tc::bridge::BridgeError("SELF_TEST", "Could not start SMB observation timer");
+                write_smb_self_test_snapshot(*state);
+                return nlohmann::json::object();
             });
         }
         if (native_flow) {
@@ -486,14 +533,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
             PostMessageW(window, WM_CLOSE, 0, 0);
             return nlohmann::json::object();
         });
-        SetTimer(hwnd, self_test_timer, memory_fixture ? 600'000 : self_test_timeout_ms, nullptr);
+        SetTimer(hwnd, self_test_timer, memory_fixture || smb_fixture ? 600'000 : self_test_timeout_ms, nullptr);
     }
 
     tc::app::WebViewHost::Options options;
     options.asset_dir = executable_dir() + L"\\frontend";
     options.browser_executable_folder = runtime_folder;
     options.user_data_dir = data_dir.empty() ? std::wstring() : data_dir + L"\\WebView2";
-    options.start_query = self_test && memory_fixture ? L"?selfTest=1&memoryFlow=1"
+    options.start_query = self_test && smb_fixture ? L"?selfTest=1&smbFlow=1"
+        : self_test && memory_fixture ? L"?selfTest=1&memoryFlow=1"
         : native_flow ? L"?selfTest=1&nativeFlow=1" : self_test ? L"?selfTest=1" : L"";
     options.on_renderer_recovery = [&app] {
         ++app.renderer_recoveries;
@@ -528,6 +576,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     }
     app.host.reset();
     app.service.reset();
+    if (app.smb_probe) write_self_test_log(app, "SMB_SHUTDOWN " + app.smb_probe->snapshot().dump());
     CoUninitialize();
     return app.exit_code;
 }
