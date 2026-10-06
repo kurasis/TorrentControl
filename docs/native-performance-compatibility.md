@@ -104,9 +104,9 @@ can still be refused instead of automatically paginated.
 
 1. Extend native paging to remaining large overview/draft/profile/batch data
    and avoid full internal report copies where only summaries are needed.
-2. Measure creation peak memory and I/O on large trees and stalled/UNC sources.
-   Existing instrumented hybrid tests prove one payload read pass on their
-   local fixtures, not stalled Windows I/O cancellation.
+2. The [creation memory package](creation-memory.md) enforces payload budgets
+   and measures real large-file/tree creation. Whole process-tree memory,
+   tighter native metadata estimates and stalled/UNC cancellation remain open.
 3. Resolve the second client's pure-v2 API and single-file hybrid path issues,
    cross-check with a mature independent v2 client such as BiglyBT and verify
    both hybrid hash families independently. Preserve every existing raw-info

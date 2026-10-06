@@ -114,7 +114,9 @@ class NetworkFixtures(unittest.TestCase):
         cls.server.server_close()
 
     def proof(self, targets, **options):
-        input_data = {"targets": targets, "timeoutMs": 300, **options}
+        # Response semantics need scheduling headroom on loaded Windows runners.
+        # Deadline/UDP tests below keep their explicit short budgets.
+        input_data = {"targets": targets, "timeoutMs": 2000, **options}
         r = subprocess.run([PROOF], input=json.dumps(input_data), text=True, capture_output=True, timeout=15)
         self.assertEqual(r.returncode, 0, r.stderr)
         return json.loads(r.stdout)
@@ -243,7 +245,7 @@ class NetworkFixtures(unittest.TestCase):
         self.assertEqual(cancelled["runs"][0]["run"]["state"], "cancelled")
         self.assertEqual(cancelled["runs"][0]["rows"][0]["state"], "cancelled")
         self.assertLess(time.monotonic() - start, .8)
-        self.assertEqual(self.state(self.endpoint("/slow/announce"))["state"], "no-response")
+        self.assertEqual(self.state(self.endpoint("/slow/announce"), timeoutMs=300)["state"], "no-response")
         cached = self.proof([self.endpoint("/valid/announce")] * 2, repeat=2)
         self.assertEqual(cached["runs"][0]["run"]["total"], 1)
         self.assertTrue(cached["runs"][1]["rows"][0]["cached"])

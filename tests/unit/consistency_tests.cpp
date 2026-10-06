@@ -93,14 +93,23 @@ TEST_CASE("worker count and buffer budget do not change the output", "[engine][P
         parallel.buffer_budget = 8 * 1024 * 1024;
         parallel.read_buffer_size = 100 * kib;
 
-        std::string const a = create_torrent(m, serial, *files).torrent_bytes;
-        std::string const b = create_torrent(m, parallel, *files).torrent_bytes;
+        auto const one = create_torrent(m, serial, *files);
+        auto const four = create_torrent(m, parallel, *files);
+        for (auto const* result : {&one, &four}) {
+            auto const budget = result == &one ? serial.buffer_budget : parallel.buffer_budget;
+            CHECK(result->hashing.peak_payload_buffer_bytes <= budget);
+            CHECK(result->hashing.peak_payload_buffer_bytes <= result->preflight.estimate.payload_buffer_bytes);
+            CHECK(result->hashing.max_read_request_bytes <= (result == &one ? serial.read_buffer_size : parallel.read_buffer_size));
+            CHECK(result->hashing.hash_slot_bytes > 0);
+        }
+        std::string const& a = one.torrent_bytes;
+        std::string const& b = four.torrent_bytes;
         CHECK(a == b);
         CHECK(validate_metainfo(Metainfo::parse(a)).empty());
     }
 }
 
-TEST_CASE("a piece larger than the buffer budget still completes", "[engine]")
+TEST_CASE("a piece larger than the hard buffer budget is refused before reading", "[engine][P02]")
 {
     tc::test::TempDir dir;
     fs::path const file = dir.path() / "data.bin";
@@ -111,7 +120,17 @@ TEST_CASE("a piece larger than the buffer budget still completes", "[engine]")
     o.piece_length = 1024 * 1024;
     o.buffer_budget = 64 * kib;
     o.hash_threads = 2;
-    CHECK(create_torrent(m, o, *files).num_pieces == 4);
+    tc::test::CountingSource counting(*files);
+    auto const error = create_failure(m, o, counting);
+    REQUIRE(error);
+    CHECK(error->code() == ErrorCode::ResourceLimit);
+    CHECK(error->phase() == Phase::Preflight);
+    CHECK(counting.opens.empty());
+    o.buffer_budget = 1024 * 1024;
+    auto const result = create_torrent(m, o, counting);
+    CHECK(result.num_pieces == 4);
+    CHECK(result.hashing.peak_payload_buffer_bytes == o.buffer_budget);
+    CHECK(result.hashing.hash_workers == 1);
 }
 
 TEST_CASE("a source replaced or modified after the manifest freeze is detected", "[engine][W03]")
@@ -238,4 +257,25 @@ TEST_CASE("preflight reports padding and estimates before hashing", "[engine][F1
     bool padding_warning = false;
     for (auto const& w : r.warnings) padding_warning |= w.message.find("padding") != std::string::npos;
     CHECK(padding_warning);
+}
+
+TEST_CASE("zero payload budget cannot open sources and explicit workers are bounded", "[engine][P02]")
+{
+    tc::test::TempDir dir;
+    tc::test::write_file(dir.path() / "data.bin", 65537);
+    auto m = scan_source(dir.path() / "data.bin");
+    auto files = make_file_payload_source();
+    tc::test::CountingSource counting(*files);
+    CreateOptions o;
+    o.piece_length = 16384; o.buffer_budget = 0;
+    auto error = create_failure(m, o, counting);
+    REQUIRE(error);
+    CHECK(error->code() == ErrorCode::ResourceLimit);
+    CHECK(counting.opens.empty());
+    o.buffer_budget = 3 * 16384 + 1; o.hash_threads = 64;
+    auto result = create_torrent(m, o, counting);
+    CHECK(result.hashing.hash_workers == 3);
+    CHECK(result.hashing.unit_bytes == 16384);
+    CHECK(result.hashing.peak_payload_buffer_bytes <= o.buffer_budget);
+    CHECK(result.preflight.estimate.payload_buffer_bytes == 3 * 16384);
 }

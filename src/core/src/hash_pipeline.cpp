@@ -70,7 +70,7 @@ Sha256Digest fold_layer(std::vector<Sha256Digest> layer, std::size_t width, Sha2
 std::uint64_t ceil_div(std::uint64_t a, std::uint64_t b) { return (a + b - 1) / b; }
 
 struct Unit {
-    std::vector<std::byte> data;
+    std::unique_ptr<std::byte[]> data;
     std::size_t size = 0;
     std::uint64_t v1_first_piece = 0;
     // v2: real bytes of one file at the start of `data` (padding may follow).
@@ -86,22 +86,22 @@ class WorkQueue {
 public:
     WorkQueue(std::size_t buffer_size, std::size_t max_buffers) : buffer_size_(buffer_size), max_buffers_(max_buffers) {}
 
-    std::vector<std::byte> acquire()
+    std::unique_ptr<std::byte[]> acquire()
     {
         std::unique_lock lock(mutex_);
         space_.wait(lock, [&] { return failed_ || !free_.empty() || allocated_ < max_buffers_; });
         rethrow_locked();
         if (!free_.empty()) {
-            std::vector<std::byte> b = std::move(free_.back());
+            auto b = std::move(free_.back());
             free_.pop_back();
             return b;
         }
         ++allocated_;
         lock.unlock();
-        return std::vector<std::byte>(buffer_size_);
+        return std::make_unique<std::byte[]>(buffer_size_);
     }
 
-    void release(std::vector<std::byte> buffer)
+    void release(std::unique_ptr<std::byte[]> buffer)
     {
         {
             std::lock_guard lock(mutex_);
@@ -157,6 +157,12 @@ public:
         rethrow_locked();
     }
 
+    std::size_t allocated_buffers()
+    {
+        std::lock_guard lock(mutex_);
+        return allocated_;
+    }
+
     // Waits until every queued unit has been hashed and its buffer returned,
     // except the one buffer the reader is filling.
     void wait_drained()
@@ -177,7 +183,7 @@ private:
     std::condition_variable ready_;
     std::condition_variable space_;
     std::deque<Unit> items_;
-    std::vector<std::vector<std::byte>> free_;
+    std::vector<std::unique_ptr<std::byte[]>> free_;
     std::size_t allocated_ = 0;
     bool closed_ = false;
     bool failed_ = false;
@@ -191,14 +197,12 @@ public:
         : job_(job), source_(source), stop_(std::move(stop)), progress_(progress),
           piece_(static_cast<std::uint64_t>(job.piece_length))
     {
-        int const hw = static_cast<int>(std::max(1u, std::thread::hardware_concurrency()));
-        threads_ = job.threads > 0 ? job.threads : std::min(4, hw);
-
-        std::uint64_t const per_buffer = job.buffer_budget / static_cast<std::uint64_t>(threads_ + 1);
-        std::uint64_t pieces_per_unit = std::max<std::uint64_t>(1, std::min(per_buffer, max_unit_bytes) / piece_);
-        unit_target_ = static_cast<std::size_t>(pieces_per_unit * piece_);
-        std::size_t const max_buffers = std::max<std::size_t>(1, job.buffer_budget / unit_target_);
-        queue_ = std::make_unique<WorkQueue>(unit_target_, max_buffers);
+        auto const plan = plan_buffers(job.piece_length, job.buffer_budget, job.threads);
+        threads_ = plan.workers;
+        unit_target_ = plan.unit_bytes;
+        out_.metrics.unit_bytes = plan.unit_bytes;
+        out_.metrics.hash_workers = plan.workers;
+        queue_ = std::make_unique<WorkQueue>(unit_target_, plan.max_buffers);
 
         std::uint64_t stream = 0;
         out_.v2_piece_roots.resize(job.files.size());
@@ -218,6 +222,8 @@ public:
             if (job.v2 && f.length > 0) out_.v2_piece_roots[i].resize(static_cast<std::size_t>(ceil_div(f.length, piece_)));
         }
         if (job.v1) out_.v1_pieces.resize(static_cast<std::size_t>(ceil_div(stream, piece_)));
+        out_.metrics.hash_slot_bytes = out_.v1_pieces.size() * sizeof(Sha1Digest);
+        for (auto const& roots : out_.v2_piece_roots) out_.metrics.hash_slot_bytes += roots.size() * sizeof(Sha256Digest);
     }
 
     HashOutput run()
@@ -256,6 +262,8 @@ public:
         queue_->close();
         workers.clear(); // joins after the queue drains
         queue_->rethrow();
+        out_.metrics.allocated_buffers = queue_->allocated_buffers();
+        out_.metrics.peak_payload_buffer_bytes = out_.metrics.allocated_buffers * unit_target_;
         return std::move(out_);
     }
 
@@ -311,7 +319,7 @@ private:
         while (n > 0) {
             begin_bytes(index, real);
             auto const take = static_cast<std::size_t>(std::min<std::uint64_t>(n, unit_target_ - current_.size));
-            std::memset(current_.data.data() + current_.size, 0, take);
+            std::memset(current_.data.get() + current_.size, 0, take);
             committed(take, real);
             n -= take;
         }
@@ -386,9 +394,10 @@ private:
             begin_bytes(index, true);
             auto const want = static_cast<std::size_t>(
                 std::min<std::uint64_t>({remaining, job_.read_size, unit_target_ - current_.size}));
+            out_.metrics.max_read_request_bytes = std::max(out_.metrics.max_read_request_bytes, want);
             std::size_t n = 0;
             try {
-                n = reader->read(std::span<std::byte>(current_.data.data() + current_.size, want));
+                n = reader->read(std::span<std::byte>(current_.data.get() + current_.size, want));
             } catch (CoreError const& e) {
                 problem(index, FileStatus::Unreadable, e.what(), &e);
                 append_zeros(index, remaining, true);
@@ -446,7 +455,7 @@ private:
 
     void process(Unit const& u)
     {
-        std::byte const* const data = u.data.data();
+        std::byte const* const data = u.data.get();
         if (job_.v1) {
             std::uint64_t piece = u.v1_first_piece;
             for (std::size_t off = 0; off < u.size; off += static_cast<std::size_t>(piece_), ++piece) {
@@ -517,6 +526,23 @@ Sha256Digest file_root(std::vector<Sha256Digest> const& piece_roots, int piece_l
     if (piece_roots.size() == 1) return piece_roots.front();
     Sha256Digest const pad = zero_subtree_root(static_cast<std::size_t>(piece_length / block_size));
     return fold_layer(piece_roots, next_power_of_two(piece_roots.size()), pad);
+}
+
+BufferPlan plan_buffers(int piece_length, std::size_t budget, int threads)
+{
+    if (piece_length < block_size || (piece_length & (piece_length - 1)) != 0)
+        throw CoreError(ErrorCode::InvalidArgument, "Piece length must be a power of two of at least 16 KiB");
+    if (threads < 0 || threads > 64)
+        throw CoreError(ErrorCode::InvalidArgument, "Hash thread count must be between 0 and 64");
+    auto const piece = static_cast<std::size_t>(piece_length);
+    if (budget < piece)
+        throw CoreError(ErrorCode::ResourceLimit, "Payload buffer budget must hold at least one piece; increase the budget or reduce piece length");
+    int const hw = static_cast<int>(std::min(64u, std::max(1u, std::thread::hardware_concurrency())));
+    int const requested = threads > 0 ? threads : std::min(4, hw);
+    int const workers = static_cast<int>(std::min(static_cast<std::size_t>(requested), budget / piece));
+    auto const per_buffer = budget / (static_cast<std::size_t>(workers) + 1);
+    auto const unit = std::max(std::size_t(1), std::min(per_buffer, max_unit_bytes) / piece) * piece;
+    return {unit, budget / unit, workers};
 }
 
 HashOutput hash_payload(HashJob const& job, PayloadSource& source, std::stop_token stop,
