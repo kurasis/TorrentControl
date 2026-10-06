@@ -8,7 +8,7 @@ const keyText = (key) => key.utf8 ?? `0x${key.hex}`;
 const taggedText = (text) => ({ t: "str", utf8: text });
 const lines = (text) => text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 
-export async function loadMetadata(state, invalidate, scope = "top", offset = 0) {
+export async function loadMetadata(state, invalidate, scope = "top", offset = 0, history = []) {
   const torrentId = state.torrent.id;
   const [page, registry] = await Promise.all([
     request("getTorrentFields", { torrentId, scope, offset, limit: 50 }),
@@ -17,7 +17,8 @@ export async function loadMetadata(state, invalidate, scope = "top", offset = 0)
   if (state.torrent?.id !== torrentId) return;
   const old = state.editor;
   state.editor = { ...(old?.torrentId === torrentId ? old : { changes: [], version: 0 }),
-    torrentId, scope, offset, rows: page.rows, total: page.total, registry: registry.fields,
+    torrentId, scope, offset, history, rows: page.rows, total: page.total, registry: registry.fields,
+    nextOffset: page.nextOffset ?? (offset + page.rows.length < page.total ? offset + page.rows.length : null),
     selection: null, dirty: false, buffer: "", remove: false, error: "", busy: false };
   state.editor.version++;
   invalidate("workspace");
@@ -143,11 +144,11 @@ export function renderMetadataEditor(state, invalidate, onSaved) {
       h("span", { class: "note" }, ` ${row.descriptor?.support ?? t("editorUnknown")} · ${row.descriptor?.type ?? row.value.t} · ${row.descriptor?.reference ?? t("editorNoStandard")}`)))),
     h("div", { class: "button-row" },
       h("button", { type: "button", disabled: e.busy || e.offset === 0, onclick: () => run(async () => {
-        stage(state); await loadMetadata(state, invalidate, e.scope, Math.max(0, e.offset - 50));
+        stage(state); await loadMetadata(state, invalidate, e.scope, e.history.at(-1) ?? Math.max(0, e.offset - 50), e.history.slice(0, -1));
       }) }, t("editorPrevious")),
-      h("span", {}, `${e.offset + 1}–${Math.min(e.offset + 50, e.total)} / ${e.total}`),
-      h("button", { type: "button", disabled: e.busy || e.offset + 50 >= e.total, onclick: () => run(async () => {
-        stage(state); await loadMetadata(state, invalidate, e.scope, e.offset + 50);
+      h("span", {}, `${e.offset + (e.rows.length ? 1 : 0)}–${e.offset + e.rows.length} / ${e.total}`),
+      h("button", { type: "button", disabled: e.busy || e.nextOffset === null, onclick: () => run(async () => {
+        stage(state); await loadMetadata(state, invalidate, e.scope, e.nextOffset, [...e.history, e.offset]);
       }) }, t("editorNext"))),
     s ? h("div", { class: "editor-selection" },
       h("h4", {}, keyText(s.key)),

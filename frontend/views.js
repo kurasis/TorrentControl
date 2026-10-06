@@ -523,6 +523,44 @@ function renderJobsTab(state, actions) {
   const job = state.selectedJob ? state.jobs.get(state.selectedJob) : null;
   if (!job) return h("p", { class: "empty" }, t("noJobs"));
   const verify = job.verify;
+  let logOffset = 0;
+  const logBox = h("pre", { class: "log", id: "job-log", tabindex: "0" }, (job.log ?? []).join("\n"));
+  const logLabel = h("p", { id: "job-log-page" });
+  const logPrevious = h("button", { type: "button", id: "job-log-prev", onclick: () => loadLog(Math.max(0, logOffset - 20)) }, t("previous"));
+  const logNext = h("button", { type: "button", id: "job-log-next", onclick: () => loadLog(logOffset + 20) }, t("next"));
+  let logRequest = 0;
+  async function loadLog(offset) {
+    const requestId = ++logRequest;
+    try {
+      const page = await actions.jobTextPage(job.id, "log", offset, 20);
+      if (!logBox.isConnected || requestId !== logRequest) return;
+      logOffset = offset;
+      replace(logBox, page.rows.map((row) => h("span", {}, row.text,
+        row.displayTruncated ? h("button", { type: "button", onclick: () => actions.jobTextDetails(job.id, "log", row.index, page.version) }, t("details")) : null, "\n")));
+      logLabel.textContent = t("logPage", { shown: `${offset + (page.rows.length ? 1 : 0)}–${offset + page.rows.length}`, total: page.total });
+      logPrevious.disabled = offset === 0;
+      logNext.disabled = offset + page.rows.length >= page.total;
+    } catch { /* Keep the preview available for retry. */ }
+  }
+  loadLog(0);
+  let verification = null;
+  if (verify) {
+    let errorsOnly = true;
+    const checkbox = h("input", { type: "checkbox", id: "verify-errors-only", checked: true });
+    const rows = h("div", { id: "verify-files", class: "files" });
+    verification = h("div", { id: "verify-result" },
+      h("p", { class: verify.ok ? "ok" : "error" }, verify.ok ? "OK" : "PAYLOAD_MISMATCH"),
+      h("label", { class: "check", for: "verify-errors-only" }, checkbox, h("span", {}, t("verifyErrorsOnly"))), rows);
+    const list = new VirtualList(rows, {
+      label: t("verifyFiles"),
+      fetchPage: (offset, limit) => actions.verifyFilesPage(job.id, offset, limit, errorsOnly),
+      renderRow: (file) => h("div", { class: file.status === "ok" ? "ok" : "error" },
+        h("span", { class: "path" }, `${file.path}: ${file.status}${file.message ? ` (${file.message})` : ""}`),
+        h("button", { type: "button", onclick: () => actions.verifyFileDetails(job.id, file.index) }, t("details"))),
+    });
+    checkbox.addEventListener("change", () => { errorsOnly = checkbox.checked; list.reset(); });
+    list.reset();
+  }
   return h("div", {},
     h("h3", {}, job.name),
     h("dl", { class: "kv" },
@@ -531,15 +569,10 @@ function renderJobsTab(state, actions) {
       kv(t("summaryFiles"), `${job.filesDone} / ${job.filesTotal}`),
       job.error ? kv(t("errorPrefix"), `${job.error.code}: ${job.error.message}`) : null,
       job.result ? kv(t("resultSaved"), job.result.output, { class: "path" }) : null),
-    verify
-      ? h("div", { id: "verify-result" },
-        h("p", { class: verify.ok ? "ok" : "error" }, verify.ok ? "OK" : "PAYLOAD_MISMATCH"),
-        h("ul", { class: "issues" }, (verify.files ?? []).filter((f) => f.status !== "ok").slice(0, 500)
-          .map((f) => h("li", { class: "error" }, `${f.path}: ${f.status}${f.message ? ` (${f.message})` : ""}`))))
-      : null,
+    verification,
     job.result ? h("button", { type: "button", id: "job-show-result", onclick: () => actions.showResult(job.id) }, t("details")) : null,
     h("h3", {}, t("jobLog")),
-    h("pre", { class: "log", id: "job-log", tabindex: "0" }, (job.log ?? []).join("\n")));
+    logBox, logLabel, h("div", { class: "button-row" }, logPrevious, logNext));
 }
 
 const TAB_RENDER = {

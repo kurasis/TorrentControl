@@ -200,6 +200,28 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
     d.register_operation("startBatch", [&app](json const&) { return json{{"jobIds", app.start_batch()}}; });
 
     // ---- Jobs --------------------------------------------------------------------
+    d.register_operation("getJobsPage", [&app](json const& p) {
+        return app.jobs().bridge_page(count(p, "offset", 0, 100'000'000), count(p, "limit", 50, 50));
+    });
+    d.register_operation("getJobTextPage", [&app](json const& p) {
+        return app.jobs().text_page(str(p, "jobId", 64), str(p, "kind", 16), count(p, "offset", 0, 100'000'000), count(p, "limit", 20, 50));
+    });
+    d.register_operation("getJobText", [&app](json const& p) {
+        return app.jobs().text_detail(str(p, "jobId", 64), str(p, "kind", 16), count(p, "index", 0, 100'000'000), str(p, "version", 20, false));
+    });
+    d.register_operation("getVerifyFilesPage", [&app](json const& p) {
+        return app.jobs().verification_page(str(p, "jobId", 64), count(p, "offset", 0, 100'000'000),
+            count(p, "limit", 250, 250), flag(p, "errorsOnly", true));
+    });
+    d.register_operation("getVerifyFile", [&app](json const& p) {
+        return app.jobs().verification_file(str(p, "jobId", 64), count(p, "index", 0, 100'000'000));
+    });
+    d.register_operation("getJobLayoutPage", [&app](json const& p) {
+        return app.jobs().layout_page(str(p, "jobId", 64), count(p, "offset", 0, 100'000'000), count(p, "limit", 50, 50));
+    });
+    d.register_operation("getJobLayoutRow", [&app](json const& p) {
+        return app.jobs().layout_row(str(p, "jobId", 64), count(p, "index", 0, 100'000'000));
+    });
     d.register_operation("pauseJob", [&app](json const& p) {
         app.jobs().pause(str(p, "jobId", 64));
         return json::object();
@@ -231,14 +253,21 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
         auto limit = count(p, "limit", 50, 50);
         auto const& entries = dict.entries();
         json rows = json::array();
+        std::size_t bytes = 0;
         for (std::size_t i = offset; i < entries.size() && rows.size() < limit; ++i) {
             auto const& e = entries[i];
             auto const* f = core::find_field(s, e.key);
-            rows.push_back({{"key", bencode_to_json(core::bencode::Value::string(e.key))},
+            json row{{"key", bencode_to_json(core::bencode::Value::string(e.key))},
                 {"value", bencode_to_json(e.value, {8, 128})}, {"descriptor", f ? descriptor(*f) : json(nullptr)},
-                {"editable", e.key.size() <= 4096 && (!f || f->editable)}});
+                {"editable", e.key.size() <= 4096 && (!f || f->editable)}};
+            auto const size = row.dump().size();
+            if (!rows.empty() && size > 256 * 1024 - bytes) break;
+            bytes += size;
+            rows.push_back(std::move(row));
         }
-        return json{{"rows", std::move(rows)}, {"total", entries.size()}};
+        auto const next = offset + rows.size();
+        return json{{"rows", std::move(rows)}, {"total", entries.size()},
+            {"nextOffset", next < entries.size() ? json(next) : json(nullptr)}};
     });
     d.register_operation("getTorrentField", [&app](json const& p) {
         auto meta = app.torrent_metainfo(str(p, "torrentId", 64));
@@ -250,7 +279,7 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
         bool editable = !f || f->editable;
         if (value) {
             bool const small = core::bencode::encode(*value).size() <= 65536;
-            shown = bencode_to_json(*value, small ? DisplayBudget{10000, 65536} : DisplayBudget{64, 1024});
+            shown = bencode_to_json(*value, small ? DisplayBudget{10000, 65536, 768 * 1024} : DisplayBudget{64, 1024});
             if (shown.dump().size() > 256 * 1024) shown = bencode_to_json(*value, {64, 1024});
             editable = editable && small && complete(shown);
         }

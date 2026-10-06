@@ -115,6 +115,25 @@ export function showMagnetCopy(magnet) {
   input.select();
 }
 
+export function showVerifyFile(file) {
+  open(t("verifyFiles"), [
+    h("p", { class: "path", id: "verify-file-path" }, file.path),
+    h("p", {}, file.status),
+    file.message ? h("p", { id: "verify-file-message" }, file.message) : null,
+    h("p", {}, `v1: ${file.badV1Pieces ?? "0"}; v2: ${file.badV2Pieces ?? "0"}`),
+  ], [button(t("close"), () => closeDialog(), { class: "primary" })], { wide: true });
+}
+
+export function showJobText(kind, text) {
+  open(t(kind === "log" ? "jobLog" : "warnings"), [h("pre", { class: "log" }, text)],
+    [button(t("close"), () => closeDialog(), { class: "primary" })], { wide: true });
+}
+
+export function showJobLayoutRow(row) {
+  open(t("layoutHeading"), [h("p", { class: "path" }, row.torrentPath), h("p", { class: "path" }, row.local)],
+    [button(t("close"), () => closeDialog(), { class: "primary" })], { wide: true });
+}
+
 // ---- Result -------------------------------------------------------------------------
 
 export function showResult(job, actions, settings) {
@@ -160,18 +179,65 @@ export function showResult(job, actions, settings) {
     confirmBox,
     r.warnings?.length || r.guaranteeNote
       ? [h("h3", {}, t("warnings")),
-        h("ul", { class: "issues" },
+        h("ul", { class: "issues", id: "result-warning-rows" },
           (r.warnings ?? []).map((w) => h("li", { class: "warning" }, w)),
-          r.guaranteeNote ? h("li", { class: "warning" }, r.guaranteeNote) : null)]
+          r.guaranteeNote ? h("li", { class: "warning" }, r.guaranteeNote) : null),
+        r.warningsTruncated || r.warningsTotal > 5 ? h("div", { class: "button-row" },
+          button(t("previous"), () => loadWarnings(Math.max(0, warningOffset - 20)), { id: "result-warning-prev" }),
+          button(t("next"), () => loadWarnings(warningOffset + 20), { id: "result-warning-next" })) : null]
       : null,
     layout.length
       ? [h("h3", {}, t("layoutHeading")),
         h("table", { class: "grid compact", id: "result-layout" },
           h("thead", {}, h("tr", {}, h("th", { scope: "col" }, t("colDestination")), h("th", { scope: "col" }, t("colSource")))),
-          h("tbody", {}, layout.slice(0, 200).map((row) =>
-            h("tr", {}, h("td", { class: "path" }, row.torrentPath), h("td", { class: "path" }, row.local)))))]
+          h("tbody", { id: "result-layout-rows" }, layout.slice(0, 200).map((row) =>
+            h("tr", {}, h("td", { class: "path" }, row.torrentPath), h("td", { class: "path" }, row.local))))),
+        h("p", { id: "result-layout-count" }),
+        h("div", { class: "button-row" },
+          button(t("previous"), () => loadLayout(Math.max(0, layoutOffset - 50)), { id: "result-layout-prev" }),
+          button(t("next"), () => loadLayout(layoutOffset + 50), { id: "result-layout-next" }))]
       : null,
   ], [button(t("close"), () => closeDialog(), { id: "result-close", class: "primary" })], { wide: true });
+  let layoutOffset = 0;
+  let layoutRequest = 0;
+  const body = document.getElementById("result-layout-rows");
+  async function loadLayout(offset) {
+    if (!body?.isConnected) return;
+    try {
+      const requestId = ++layoutRequest;
+      const page = await actions.jobLayoutPage(job.id, offset, 50);
+      if (!body.isConnected || requestId !== layoutRequest) return;
+      layoutOffset = offset;
+      replace(body, page.rows.map((row) => h("tr", {}, h("td", { class: "path" }, row.torrentPath), h("td", { class: "path" }, row.local,
+        row.displayTruncated ? button(t("details"), () => actions.jobLayoutDetails(job.id, row.index)) : null))));
+      document.getElementById("result-layout-count").textContent = t("layoutPage", {
+        shown: `${offset + 1}–${offset + page.rows.length}`, total: page.total, realFiles: page.realFiles,
+      });
+      document.getElementById("result-layout-prev").disabled = offset === 0;
+      document.getElementById("result-layout-next").disabled = offset + page.rows.length >= page.total;
+    } catch {
+      // Keep the preview and allow retry without hiding the creation result.
+    }
+  }
+  if (body) loadLayout(0);
+  let warningOffset = 0;
+  let warningRequest = 0;
+  const warningRows = document.getElementById("result-warning-rows");
+  async function loadWarnings(offset) {
+    if (!warningRows?.isConnected) return;
+    try {
+      const requestId = ++warningRequest;
+      const page = await actions.jobTextPage(job.id, "warnings", offset, 20);
+      if (!warningRows.isConnected || requestId !== warningRequest) return;
+      warningOffset = offset;
+      replace(warningRows, page.rows.map((row) => h("li", { class: "warning" }, row.text,
+        row.displayTruncated ? button(t("details"), () => actions.jobTextDetails(job.id, "warnings", row.index, page.version)) : null)),
+        r.guaranteeNote ? h("li", { class: "warning" }, r.guaranteeNote) : null);
+      document.getElementById("result-warning-prev").disabled = offset === 0;
+      document.getElementById("result-warning-next").disabled = offset + page.rows.length >= page.total;
+    } catch { /* Keep the preview available for retry. */ }
+  }
+  if (r.warningsTruncated || r.warningsTotal > 5) loadWarnings(0);
 }
 
 // ---- Profile change preview -----------------------------------------------------------

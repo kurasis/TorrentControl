@@ -68,7 +68,7 @@ AppService::AppService(Options options, EventSink sink) : options_(std::move(opt
     if (!options_.settings_path.empty()) settings_ = load_settings(options_.settings_path);
     options_.jobs.max_concurrent = settings_.max_concurrent_jobs;
     jobs_ = std::make_unique<JobScheduler>(options_.jobs, [this](JobSnapshot const& s) {
-        emit(json{{"type", "job"}, {"job", to_json(s)}});
+        emit(json{{"type", "job"}, {"job", to_json(s, true)}});
     });
     diagnostics_ = std::make_unique<DiagnosticsService>([this](json const& event) { emit(event); });
     scan_ = std::make_shared<ScanResult>();
@@ -933,10 +933,10 @@ json AppService::export_profile(std::string const& id, bool include_secrets) con
 
 json AppService::snapshot() const
 {
-    json jobs = json::array();
-    for (auto const& s : jobs_->snapshot()) jobs.push_back(to_json(s));
-    json j{{"draft", draft_json()}, {"scan", scan_state()}, {"jobs", std::move(jobs)}, {"settings", settings_json()},
+    auto jobs = jobs_->bridge_page(0, 50);
+    json j{{"draft", draft_json()}, {"scan", scan_state()}, {"jobs", std::move(jobs["jobs"])}, {"settings", settings_json()},
         {"profiles", profiles_json()}, {"diagnostics", diagnostics_->snapshot()}};
+    j["jobsTotal"] = jobs["total"]; j["nextJobsOffset"] = jobs["nextOffset"]; j["jobsRevision"] = jobs["collectionRevision"];
     std::lock_guard lock(mutex_);
     if (batch_) j["batch"] = to_json(*batch_);
     j["torrent"] = selected_torrent_;
