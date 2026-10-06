@@ -222,3 +222,11 @@ create/verify fixtures. Следом — отменяемое чтение Windo
 reader, отменяет ожидающие Windows reads через CancelIoEx и проверяет безопасное
 завершение/сохранность предыдущего output. Реальные remote SMB faults и
 независимое подтверждение v2 остаются release gates.
+
+Пакет [дерева процессов и SMB](process-memory-smb.md) измеряет одинаковые
+AppService-сценарии в headless и настоящем Windows/WebView2, включая дочерние
+процессы и очистку истории. Добавлены реальные TCP/SMB-сбои Linux CIFS/Samba:
+ожидающее чтение, задержанное открытие, отключение сервера и успешный повтор.
+Исправлены отказ проверки большого hybrid torrent и удержание удалённой native
+истории в renderer. Remote Windows SMB, длительные сессии с тысячами заданий
+и произвольные storage-driver stalls остаются открытыми gates.

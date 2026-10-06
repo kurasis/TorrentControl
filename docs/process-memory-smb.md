@@ -56,6 +56,14 @@ On Windows, use the `.exe` proof and add
 Reports retain per-phase peaks, metric definitions, original sample sweeps,
 process identities, workflow results and native GUI logs as CI artifacts.
 
+Local Linux validation passed 166 CTest cases both normally and under
+ASan/UBSan, three sampler/fault-driver controls and all six full-size memory
+cases. Observed headless creation peaks were 410 / 423 / 950 MiB for the
+100,000-file v1 / v2 / hybrid tree, and 54–65 MiB for the 96 MiB file.
+These are machine-specific observations. The
+[local report](evidence/process-memory/linux-local.json) retains all phase
+measurements; CI publishes the Windows GUI/headless pairs and Linux SMB cases.
+
 ## Real SMB faults
 
 `tests/performance/smb_faults.py` requires a disposable root-capable Linux
@@ -85,6 +93,12 @@ zero live readers, unchanged previous output and no temporary files. Every
 case performs a healthy retry with identical baseline torrent bytes; the
 original payload must remain unchanged. Normal cleanup must unmount the share
 and remove the task-owned namespace, interfaces and server.
+
+The real GUI run also exposed retained renderer job history: snapshot refresh
+merged jobs but never removed rows already cleared in native state. Complete
+snapshot reconciliation now removes unchanged missing rows while retaining job
+events received during the read. A background redraw likewise keeps an active
+paged row input until blur commits it. Browser regressions cover both cases.
 
 ```sh
 sudo apt-get install -y samba cifs-utils iproute2

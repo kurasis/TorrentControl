@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import platform
 import signal
+import shutil
 import socket
 import subprocess
 import sys
@@ -49,7 +50,7 @@ class SmbFixture:
             for _ in range(64):
                 out.write(bytes(range(256)) * 4096)
         self.source.chmod(0o644)
-        for name in ('state', 'lock', 'private', 'cache', 'pid'):
+        for name in ('state', 'lock', 'private', 'cache', 'pid', 'ncalrpc'):
             (root / name).mkdir()
         self.config = root / 'smb.conf'
         self.config.write_text(f'''[global]
@@ -72,6 +73,7 @@ lock directory = {root / 'lock'}
 private dir = {root / 'private'}
 cache directory = {root / 'cache'}
 pid directory = {root / 'pid'}
+ncalrpc dir = {root / 'ncalrpc'}
 log file = {root / 'samba.log'}
 [payload]
 path = {self.backing}
@@ -92,7 +94,7 @@ read only = yes
         run('ip', '-n', self.namespace, 'link', 'set', 'lo', 'up')
         self.start_server()
         run('mount', '-t', 'cifs', f'//{self.server_ip}/payload', str(self.mount), '-o',
-            'guest,username=tc-fixture,port=1445,vers=3.1.1,cache=none,actimeo=0,soft,echo_interval=1,ro,noserverino', timeout=30)
+            'guest,username=tc-fixture,port=1445,vers=3.1.1,cache=none,actimeo=0,closetimeo=0,nolease,soft,echo_interval=1,ro,noserverino', timeout=30)
         self.mounted = True
         assert run('stat', '-f', '-c', '%T', str(self.mount)) in ('smb2', 'cifs'), 'The source must be a kernel CIFS mount'
 
@@ -105,7 +107,11 @@ read only = yes
         deadline = time.monotonic() + 15
         while True:
             if self.server.poll() is not None:
-                raise RuntimeError('Fixture Samba server exited during startup')
+                messages = (self.root / 'server-stdout.log').read_text(errors='replace')
+                samba_log = self.root / 'samba.log'
+                if samba_log.exists():
+                    messages += '\n' + samba_log.read_text(errors='replace')
+                raise RuntimeError('Fixture Samba server exited during startup: ' + messages[-4000:])
             try:
                 with socket.create_connection((self.server_ip, 1445), timeout=0.2):
                     return
@@ -286,8 +292,15 @@ def main():
                 report['payloadUnchanged'] = True
                 report['passed'] = True
             finally:
-                fixture.close()
-                report['fixtureCleaned'] = True
+                try:
+                    fixture.close()
+                    report['fixtureCleaned'] = True
+                finally:
+                    saved = details / 'fixture-logs'
+                    saved.mkdir(exist_ok=True)
+                    for log in Path(temp).glob('*.log*'):
+                        if log.is_file():
+                            shutil.copy2(log, saved / log.name)
     except Exception as error:
         report['passed'] = False
         report['error'] = str(error)

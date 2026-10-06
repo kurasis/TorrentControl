@@ -1,0 +1,445 @@
+{
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "cpuCount": 5,
+  "scope": "fresh AppService scan/review/create/job-history workflow; task-owned descendants included",
+  "metrics": "RSS/working-set sum within each sampling sweep; shared pages may be counted multiple times; Linux PSS and Windows private commit are separate metrics",
+  "limitations": "50 ms samples may miss short-lived children and peaks; excludes driver/kernel/page-cache memory and Python driver; no machine-independent memory threshold",
+  "cachePolicy": "OS cache is not flushed; headless precedes GUI on each dataset",
+  "cases": [
+    {
+      "shape": "tree",
+      "format": "v1",
+      "mode": "headless",
+      "files": 100000,
+      "outputSha256": "aa2a3aad4054d5dbabc4b880cb9bc70b4c6fc1bcac768efc76d05594c5ef4dfb",
+      "referenceVerified": true,
+      "phases": {
+        "idle": {
+          "samples": 5,
+          "peakResidentSumBytes": 5451776,
+          "rootResidentAtPeakBytes": 5451776,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 4219904,
+          "peakPrivateCommitBytes": null
+        },
+        "scan": {
+          "samples": 35,
+          "peakResidentSumBytes": 143806464,
+          "rootResidentAtPeakBytes": 143806464,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 143209472,
+          "peakPrivateCommitBytes": null
+        },
+        "review": {
+          "samples": 12,
+          "peakResidentSumBytes": 143814656,
+          "rootResidentAtPeakBytes": 143814656,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 143217664,
+          "peakPrivateCommitBytes": null
+        },
+        "create": {
+          "samples": 32,
+          "peakResidentSumBytes": 429568000,
+          "rootResidentAtPeakBytes": 429568000,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 428951552,
+          "peakPrivateCommitBytes": null
+        },
+        "completed": {
+          "samples": 5,
+          "peakResidentSumBytes": 394272768,
+          "rootResidentAtPeakBytes": 394272768,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 393656320,
+          "peakPrivateCommitBytes": null
+        },
+        "cleared": {
+          "samples": 6,
+          "peakResidentSumBytes": 372654080,
+          "rootResidentAtPeakBytes": 372654080,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 372037632,
+          "peakPrivateCommitBytes": null
+        }
+      },
+      "processIdentities": 1,
+      "survivingChildren": []
+    },
+    {
+      "shape": "tree",
+      "format": "v2",
+      "mode": "headless",
+      "files": 100000,
+      "outputSha256": "bc10ac7049660ac0e0c1816b09c03d83dcac635a575ecf73683baa1af648905d",
+      "referenceVerified": true,
+      "phases": {
+        "idle": {
+          "samples": 6,
+          "peakResidentSumBytes": 5435392,
+          "rootResidentAtPeakBytes": 5435392,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 4858880,
+          "peakPrivateCommitBytes": null
+        },
+        "scan": {
+          "samples": 36,
+          "peakResidentSumBytes": 163831808,
+          "rootResidentAtPeakBytes": 163831808,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 163234816,
+          "peakPrivateCommitBytes": null
+        },
+        "review": {
+          "samples": 12,
+          "peakResidentSumBytes": 163835904,
+          "rootResidentAtPeakBytes": 163835904,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 163238912,
+          "peakPrivateCommitBytes": null
+        },
+        "create": {
+          "samples": 50,
+          "peakResidentSumBytes": 442978304,
+          "rootResidentAtPeakBytes": 442978304,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 442355712,
+          "peakPrivateCommitBytes": null
+        },
+        "completed": {
+          "samples": 6,
+          "peakResidentSumBytes": 434741248,
+          "rootResidentAtPeakBytes": 434741248,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 434118656,
+          "peakPrivateCommitBytes": null
+        },
+        "cleared": {
+          "samples": 6,
+          "peakResidentSumBytes": 351514624,
+          "rootResidentAtPeakBytes": 351514624,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 350892032,
+          "peakPrivateCommitBytes": null
+        }
+      },
+      "processIdentities": 1,
+      "survivingChildren": []
+    },
+    {
+      "shape": "tree",
+      "format": "hybrid",
+      "mode": "headless",
+      "files": 100000,
+      "outputSha256": "de1b0814f5c92a22bca7d439ea52850dcf3ff885a2d33fef7073b8c8f7175316",
+      "referenceVerified": true,
+      "phases": {
+        "idle": {
+          "samples": 6,
+          "peakResidentSumBytes": 5226496,
+          "rootResidentAtPeakBytes": 5226496,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 4649984,
+          "peakPrivateCommitBytes": null
+        },
+        "scan": {
+          "samples": 36,
+          "peakResidentSumBytes": 163696640,
+          "rootResidentAtPeakBytes": 163696640,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 163099648,
+          "peakPrivateCommitBytes": null
+        },
+        "review": {
+          "samples": 14,
+          "peakResidentSumBytes": 163700736,
+          "rootResidentAtPeakBytes": 163700736,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 163103744,
+          "peakPrivateCommitBytes": null
+        },
+        "create": {
+          "samples": 99,
+          "peakResidentSumBytes": 995717120,
+          "rootResidentAtPeakBytes": 995717120,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 995094528,
+          "peakPrivateCommitBytes": null
+        },
+        "completed": {
+          "samples": 5,
+          "peakResidentSumBytes": 886165504,
+          "rootResidentAtPeakBytes": 886165504,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 885542912,
+          "peakPrivateCommitBytes": null
+        },
+        "cleared": {
+          "samples": 6,
+          "peakResidentSumBytes": 804343808,
+          "rootResidentAtPeakBytes": 804343808,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 803721216,
+          "peakPrivateCommitBytes": null
+        }
+      },
+      "processIdentities": 1,
+      "survivingChildren": []
+    },
+    {
+      "shape": "large-file",
+      "format": "v1",
+      "mode": "headless",
+      "files": 1,
+      "outputSha256": "28f36a872b5fb0ae9f4f1b518234cc886b0ed25daba16bcf721c4f1665fed986",
+      "referenceVerified": true,
+      "phases": {
+        "idle": {
+          "samples": 6,
+          "peakResidentSumBytes": 5451776,
+          "rootResidentAtPeakBytes": 5451776,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 4875264,
+          "peakPrivateCommitBytes": null
+        },
+        "scan": {
+          "samples": 5,
+          "peakResidentSumBytes": 6209536,
+          "rootResidentAtPeakBytes": 6209536,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 5614592,
+          "peakPrivateCommitBytes": null
+        },
+        "review": {
+          "samples": 6,
+          "peakResidentSumBytes": 6213632,
+          "rootResidentAtPeakBytes": 6213632,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 5618688,
+          "peakPrivateCommitBytes": null
+        },
+        "create": {
+          "samples": 3,
+          "peakResidentSumBytes": 58994688,
+          "rootResidentAtPeakBytes": 58994688,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 58388480,
+          "peakPrivateCommitBytes": null
+        },
+        "completed": {
+          "samples": 4,
+          "peakResidentSumBytes": 9342976,
+          "rootResidentAtPeakBytes": 9342976,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 8723456,
+          "peakPrivateCommitBytes": null
+        },
+        "cleared": {
+          "samples": 4,
+          "peakResidentSumBytes": 9330688,
+          "rootResidentAtPeakBytes": 9330688,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 8711168,
+          "peakPrivateCommitBytes": null
+        }
+      },
+      "processIdentities": 1,
+      "survivingChildren": []
+    },
+    {
+      "shape": "large-file",
+      "format": "v2",
+      "mode": "headless",
+      "files": 1,
+      "outputSha256": "91590765e19811d3dac9c7212fb62175a1c565a76373b6541e0f192b37803fd8",
+      "referenceVerified": true,
+      "phases": {
+        "idle": {
+          "samples": 6,
+          "peakResidentSumBytes": 5705728,
+          "rootResidentAtPeakBytes": 5705728,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 5129216,
+          "peakPrivateCommitBytes": null
+        },
+        "scan": {
+          "samples": 5,
+          "peakResidentSumBytes": 6410240,
+          "rootResidentAtPeakBytes": 6410240,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 5815296,
+          "peakPrivateCommitBytes": null
+        },
+        "review": {
+          "samples": 5,
+          "peakResidentSumBytes": 6414336,
+          "rootResidentAtPeakBytes": 6414336,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 5819392,
+          "peakPrivateCommitBytes": null
+        },
+        "create": {
+          "samples": 4,
+          "peakResidentSumBytes": 67776512,
+          "rootResidentAtPeakBytes": 67776512,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 67170304,
+          "peakPrivateCommitBytes": null
+        },
+        "completed": {
+          "samples": 6,
+          "peakResidentSumBytes": 9322496,
+          "rootResidentAtPeakBytes": 9322496,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 8702976,
+          "peakPrivateCommitBytes": null
+        },
+        "cleared": {
+          "samples": 3,
+          "peakResidentSumBytes": 9306112,
+          "rootResidentAtPeakBytes": 9306112,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 8686592,
+          "peakPrivateCommitBytes": null
+        }
+      },
+      "processIdentities": 1,
+      "survivingChildren": []
+    },
+    {
+      "shape": "large-file",
+      "format": "hybrid",
+      "mode": "headless",
+      "files": 1,
+      "outputSha256": "2f407c2dd10bb8109b9b39de69517e3de43afc0efa30aa94bfaa5a041a64d566",
+      "referenceVerified": true,
+      "phases": {
+        "idle": {
+          "samples": 6,
+          "peakResidentSumBytes": 5382144,
+          "rootResidentAtPeakBytes": 5382144,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 4805632,
+          "peakPrivateCommitBytes": null
+        },
+        "scan": {
+          "samples": 5,
+          "peakResidentSumBytes": 6127616,
+          "rootResidentAtPeakBytes": 6127616,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 5532672,
+          "peakPrivateCommitBytes": null
+        },
+        "review": {
+          "samples": 6,
+          "peakResidentSumBytes": 6131712,
+          "rootResidentAtPeakBytes": 6131712,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 5536768,
+          "peakPrivateCommitBytes": null
+        },
+        "create": {
+          "samples": 3,
+          "peakResidentSumBytes": 56848384,
+          "rootResidentAtPeakBytes": 56848384,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 57200640,
+          "peakPrivateCommitBytes": null
+        },
+        "completed": {
+          "samples": 6,
+          "peakResidentSumBytes": 9441280,
+          "rootResidentAtPeakBytes": 9441280,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 8821760,
+          "peakPrivateCommitBytes": null
+        },
+        "cleared": {
+          "samples": 3,
+          "peakResidentSumBytes": 9424896,
+          "rootResidentAtPeakBytes": 9424896,
+          "childResidentAtPeakBytes": 0,
+          "processesAtPeak": 1,
+          "maxProcesses": 1,
+          "peakPssBytes": 8805376,
+          "peakPrivateCommitBytes": null
+        }
+      },
+      "processIdentities": 1,
+      "survivingChildren": []
+    }
+  ],
+  "comparisons": [],
+  "passed": true,
+  "testedCommit": "89e6244c04ecaf426933b502186cddeb952fb194"
+}

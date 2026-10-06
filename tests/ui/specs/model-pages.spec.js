@@ -45,6 +45,12 @@ test.describe("native row editing", () => {
     await page.getByRole("button", { name: "Source-0", exact: true }).click();
     await page.locator("#paged-exclusions-last").click();
     await page.locator("#paged-exclusions-999").fill("changed-pattern");
+    // A real background scan update must not detach an uncommitted row input.
+    await page.evaluate(() => window.__mock.emit("scan", { state: "scanning", sourcesRevision: "0" }));
+    await expect.poll(() => page.evaluate(async () => { const { state } = await import("/app.js"); return state.scan.state; })).toBe("scanning");
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.locator("#paged-exclusions-999")).toBeFocused();
+    await expect(page.locator("#paged-exclusions-999")).toHaveValue("changed-pattern");
     await page.locator("#paged-exclusions-999").press("Tab");
     await expect.poll(() => page.evaluate(() => window.__mock.draft.sources[0].exclusions[999])).toBe("changed-pattern");
     await expect.poll(() => page.evaluate(async () => { const { state } = await import("/app.js"); return state.draft.revision; })).toBe("2");

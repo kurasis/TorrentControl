@@ -176,6 +176,11 @@
     },
     getJobsPage: (p) => ({ jobs: jobs.slice(p.offset, p.offset + p.limit), total: jobs.length, collectionRevision: "1",
       nextOffset: p.offset + p.limit < jobs.length ? p.offset + p.limit : null }),
+    clearFinishedJobs: () => {
+      for (let i = jobs.length - 1; i >= 0; --i)
+        if (/^(Succeeded|SucceededWithWarnings|Failed|Cancelled)$/.test(jobs[i].state)) jobs.splice(i, 1);
+      return {};
+    },
     getVerifyFilesPage: (p) => {
       const total = p.errorsOnly ? (config.verifyErrors ?? 0) : (config.verifyFiles ?? 0);
       return { total, rows: Array.from({ length: Math.min(p.limit, Math.max(0, total - p.offset)) }, (_, i) => {
