@@ -18,6 +18,7 @@ add_executable(tc_unit_tests
     unit/manifest_tests.cpp
     unit/metainfo_tests.cpp
     unit/metainfo_validation_tests.cpp
+    unit/model_paging_tests.cpp
     unit/output_tests.cpp
     unit/runtime_policy_tests.cpp
     unit/outgoing_bridge_tests.cpp

@@ -161,18 +161,18 @@ json to_json(SourceSpec const& s)
         {"followLinks", s.follow_links}, {"skipCloud", s.skip_cloud}};
 }
 
-json to_json(Draft const& d)
+json to_json(Draft const& d, bool collections)
 {
     json sources = json::array();
-    for (auto const& s : d.sources) sources.push_back(to_json(s));
+    if (collections) for (auto const& s : d.sources) sources.push_back(to_json(s));
     json trackers = json::array();
-    for (auto const& t : d.trackers) trackers.push_back({{"url", t.url}, {"tier", t.tier}, {"enabled", t.enabled}});
+    if (collections) for (auto const& t : d.trackers) trackers.push_back({{"url", t.url}, {"tier", t.tier}, {"enabled", t.enabled}});
     json nodes = json::array();
     for (auto const& [host, port] : d.dht_nodes) nodes.push_back({{"host", host}, {"port", port}});
     return json{{"revision", std::to_string(d.revision)}, {"sources", std::move(sources)}, {"name", d.name},
         {"effectiveName", effective_name(d)}, {"profile", d.profile_id},
         {"format", std::string(core::to_string(d.format))}, {"pieceLength", d.piece_length},
-        {"private", d.private_flag}, {"trackers", std::move(trackers)}, {"webSeeds", d.web_seeds},
+        {"private", d.private_flag}, {"trackers", std::move(trackers)}, {"webSeeds", collections ? json(d.web_seeds) : json::array()},
         {"dhtNodes", std::move(nodes)}, {"comment", d.comment}, {"creator", d.creator}, {"source", d.source_tag},
         {"creationDate", std::string(to_string(d.date_policy))}, {"fixedDate", std::to_string(d.fixed_date)},
         {"output", core::to_utf8(d.output)}, {"replaceExisting", d.replace_existing},

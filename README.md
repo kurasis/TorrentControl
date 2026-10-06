@@ -75,4 +75,5 @@ prints `{"status": "failed", "code": ...}` and exits with 2.
 - [M0 integration proof report](docs/m0-integration-proof.md)
 - [M2 stabilization and regression evidence](docs/m2-stabilization.md)
 - [Settings persistence and Runtime compatibility](docs/settings-runtime-reliability.md)
+- [Native model pagination](docs/model-pagination.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)

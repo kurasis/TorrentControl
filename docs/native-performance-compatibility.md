@@ -99,11 +99,13 @@ or make running filesystem calls cancellable.
 
 The [outgoing bridge package](bounded-outgoing-bridge.md) adds a 1 MiB
 transport limit, compact/paged job and verification data and aggregate
-metadata display budgets. Large unpaged overview/draft/profile/batch objects
-can still be refused instead of automatically paginated.
+metadata display budgets. The [model pagination package](model-pagination.md)
+adds native pages and user flows for large overview/draft/profile/batch data,
+with indexed edits preserving unloaded rows.
 
-1. Extend native paging to remaining large overview/draft/profile/batch data
-   and avoid full internal report copies where only summaries are needed.
+1. Model paging is implemented; complete native models and some intermediate
+   profile/review reports are still retained. Measure and reduce these costs
+   together with whole process-tree and frontend job-history memory.
 2. The [creation memory package](creation-memory.md) enforces payload budgets
    and measures real large-file/tree creation. Whole process-tree memory,
    tighter native metadata estimates remain open. The [payload I/O package](cancellable-payload-io.md)

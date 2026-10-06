@@ -34,6 +34,16 @@
     allowHydration: false,
     acceptLargeResourceUse: false,
   };
+  if (config.sourcesCount) draft.sources = Array.from({ length: config.sourcesCount }, (_, i) => ({
+    id: `source-${i}`, name: `Source-${i}`, path: `C:\\data\\Source-${i}`, isDirectory: true,
+    recursive: true, followLinks: false, skipCloud: false, exclusions: [],
+  }));
+  if (config.trackersCount) draft.trackers = Array.from({ length: config.trackersCount }, (_, i) => ({ url: `https://tracker-${i}.example/announce`, tier: i % 999, enabled: true }));
+  if (config.truncatedTracker) draft.trackers = [{ url: "https://legacy.example/" + "x".repeat(100000), tier: 0, enabled: true }];
+  if (config.webSeedsCount) draft.webSeeds = Array.from({ length: config.webSeedsCount }, (_, i) => `https://seed-${i}.example/`);
+  if (config.profilesCount) profiles.push(...Array.from({ length: config.profilesCount }, (_, i) => ({ id: `custom-${i}`, name: `Profile-${i}`, builtin: false, format: "hybrid" })));
+  if (config.exclusionsCount && draft.sources.length) draft.sources[0].exclusions = Array.from({ length: config.exclusionsCount }, (_, i) => `pattern-${i}`);
+  let batchPlan = null, batchRevision = 0;
   let scan = { state: "empty", sourcesRevision: "0" };
   const settings = Object.assign({ theme: "system", language: "en", mode: "simple", openClientWithoutAsking: false }, config.settings);
   const jobs = config.jobs ?? [];
@@ -53,8 +63,29 @@
   const diagnosticRows = config.diagnosticRows ?? [{ endpoint: "http://tracker.example:80", kind: "tracker", operation: "scrape-random-hash", state: "protocol-responding", checkedAt: "1791158400", cached: false, integrity: "not-verified", attempts: [{ family: 4, state: "protocol-responding", httpStatus: 200, latencyMs: 4 }] }];
   let diagnosticCounter = 0;
 
+  function boundedPage(items, offset = 0, limit = 50, version = String(revision)) {
+    const size = Math.min(limit, config.modelPageSize ?? 50);
+    const rows = items.slice(offset, offset + size);
+    return { offset, items: structuredClone(rows), total: items.length, revision: version,
+      nextOffset: offset + rows.length < items.length ? offset + rows.length : null };
+  }
+  function sourceRow(source) {
+    return { ...source, exclusions: source.exclusions.length > 3 ? [] : source.exclusions,
+      exclusionsTotal: source.exclusions.length, exclusionsPaged: source.exclusions.length > 3 };
+  }
+  function trackerRow(row) {
+    return row.url.length > 32768 ? { ...row, url: row.url.slice(0, 512), displayTruncated: true } : row;
+  }
   function snapshotDraft() {
-    return { ...draft, revision: String(revision), scan, outputAuto: true, canUndo: false };
+    const result = structuredClone({ ...draft, revision: String(revision), scan, profileMeta: profiles.find((profile) => profile.id === draft.profile) });
+    if (config.modelPaging) {
+      result.pages = {};
+      for (const key of ["sources", "trackers", "webSeeds"]) {
+        const page = boundedPage(key === "sources" ? draft.sources.map(sourceRow) : key === "trackers" ? draft.trackers.map(trackerRow) : draft[key]);
+        result[key] = page.items; delete page.items; result.pages[key] = page;
+      }
+    }
+    return result;
   }
 
   function bump() {
@@ -82,6 +113,54 @@
   }
 
   const ops = {
+    getModelPage: (p) => {
+      if (config.failModelPageOnce) { config.failModelPageOnce = false; throw Object.assign(new Error("Read failed"), { code: "IO_ERROR" }); }
+      if (p.model === "draft") {
+        if (p.revision !== String(revision)) throw Object.assign(new Error("Changed"), { code: "STALE_REVISION" });
+        if (p.key === "source") return boundedPage([sourceRow(draft.sources.find((s) => s.id === p.owner))], p.offset, p.limit);
+        if (p.key === "exclusions") return boundedPage(draft.sources.find((s) => s.id === p.owner).exclusions, p.offset, p.limit);
+        return boundedPage(p.key === "sources" ? draft.sources.map(sourceRow) : p.key === "trackers" ? draft.trackers.map(trackerRow) : draft[p.key], p.offset, p.limit);
+      }
+      if (p.model === "profiles") return boundedPage(profiles, p.offset, p.limit, "0");
+      if (p.model === "batch") return boundedPage(batchPlan[p.key], p.offset, p.limit, batchPlan.revision);
+      if (p.model === "torrent") return boundedPage(config.torrentCollections[p.key], p.offset, p.limit, p.owner);
+      throw new Error("Unknown model");
+    },
+    getModelText: (p) => {
+      const root = p.model === "torrent" ? config.torrentFull ?? torrent : draft;
+      const value = p.key.startsWith("/") ? p.key.split("/").slice(1).reduce((row, key) => row[key], root) : root[p.key];
+      const text = value.slice(p.offset, p.offset + 8192);
+      const next = p.offset + text.length;
+      return { text, offset: p.offset, totalBytes: value.length, nextOffset: next < value.length ? next : null };
+    },
+    editDraftRow: (p, message) => {
+      if (message.draftRevision !== String(revision)) throw Object.assign(new Error("Changed"), { code: "STALE_REVISION" });
+      const rows = p.key === "exclusions" ? draft.sources.find((s) => s.id === p.owner).exclusions : draft[p.key];
+      if (p.action === "set") rows[p.index] = p.value;
+      else if (p.action === "remove") rows.splice(p.index, 1);
+      else if (p.action === "append") rows.push(p.value);
+      else if (p.action === "up" && p.index) [rows[p.index], rows[p.index-1]] = [rows[p.index-1], rows[p.index]];
+      bump(); return { draft: snapshotDraft() };
+    },
+    setSourceOptions: (p) => { Object.assign(draft.sources.find((s) => s.id === p.sourceId), p.options); bump(); return { draft: snapshotDraft() }; },
+    planBatch: () => {
+      const items = Array.from({ length: config.batchCount ?? 100 }, (_, i) => ({ id: `item-${i}`, name: `Batch-${i}`, output: `C:\\out\\${i}.torrent`, policy: "rename", included: true }));
+      batchPlan = { items, notes: [], outputDir: "C:\\out", revision: String(++batchRevision) };
+      return { ...batchPlan, items: boundedPage(items).items, total: items.length, includedTotal: items.length };
+    },
+    updateBatch: (p) => {
+      for (const [id, change] of Object.entries(p.overrides)) Object.assign(batchPlan.items.find((row) => row.id === id), change);
+      batchPlan.revision = String(++batchRevision);
+      return { ...batchPlan, items: boundedPage(batchPlan.items).items, total: batchPlan.items.length, includedTotal: batchPlan.items.filter((row) => row.included).length };
+    },
+    startBatch: () => {
+      const count = batchPlan.items.filter((row) => row.included).length;
+      return { batchId: "batch-1", jobIds: Array.from({ length: Math.min(50, count) }, (_, i) => `job-${i}`), total: count, nextOffset: count > 50 ? 50 : null };
+    },
+    getBatchStatus: () => {
+      const count = batchPlan.items.filter((row) => row.included).length;
+      return { batchId: "batch-1", total: count, done: count, failed: 0, cancelled: 0, finished: true };
+    },
     getSelfTestState: () => ({ checkpoint: config.nativeCheckpoint ?? null,
       rendererRecoveries: config.rendererRecoveries ?? 0, settingsOnly: config.settingsOnly ?? false }),
     reportSelfTest: () => ({}),
@@ -90,7 +169,7 @@
     getEngineInfo: () => ({ appVersion: "0.0.0-test", engineVersion: "libtorrent 2.1.2", protocolVersion: 1 }),
     getSnapshot: () => ({ draft: snapshotDraft(), scan, jobs: config.pagedJobs ? jobs.slice(0, 50) : jobs,
       nextJobsOffset: config.pagedJobs && jobs.length > 50 ? 50 : null,
-      jobsTotal: jobs.length, jobsRevision: "1", settings, profiles, torrent, editorPreview, diagnostics: diagnosticRun ? [diagnosticRun] : [] }),
+      jobsTotal: jobs.length, jobsRevision: "1", settings, profiles: config.modelPaging ? profiles.slice(0, 50) : profiles, profilesTotal: profiles.length, profilesRevision: "0", torrent, editorPreview, diagnostics: diagnosticRun ? [diagnosticRun] : [] }),
     getJobsPage: (p) => ({ jobs: jobs.slice(p.offset, p.offset + p.limit), total: jobs.length, collectionRevision: "1",
       nextOffset: p.offset + p.limit < jobs.length ? p.offset + p.limit : null }),
     getVerifyFilesPage: (p) => {

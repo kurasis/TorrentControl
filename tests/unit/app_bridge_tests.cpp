@@ -418,3 +418,25 @@ TEST_CASE("settings IO failures cross the bridge without committing a change", "
     CHECK(b.ok("updateSettings", {{"patch", {{"theme", "dark"}}}})["theme"] == "dark");
     CHECK(service::load_settings(file).theme == "dark");
 }
+
+TEST_CASE("large draft collections cross the bridge as bounded pages and row mutations", "[bridge][paging]")
+{
+    Bridge b;
+    json rows = json::array();
+    for (int i = 0; i < 1000; ++i) rows.push_back({{"url", "https://tracker.example/" + std::string(1000, '\1') + std::to_string(i)}, {"tier", i % 999}, {"enabled", true}});
+    b.app->update_draft({{"trackers", rows}}, std::nullopt);
+    auto snapshot = b.ok("getSnapshot");
+    auto revision = snapshot["draft"]["revision"].get<std::string>();
+    CHECK(snapshot["draft"]["pages"]["trackers"]["total"] == 1000);
+    CHECK(snapshot.dump().size() < bridge::max_message_bytes);
+    auto page = b.ok("getModelPage", {{"model", "draft"}, {"key", "trackers"}, {"offset", 999u}, {"revision", revision}});
+    CHECK(page["items"][0]["url"] == rows.back()["url"]);
+    auto result = b.ok("editDraftRow", {{"key", "trackers"}, {"index", 999u}, {"action", "remove"}}, revision);
+    CHECK(result["draft"]["pages"]["trackers"]["total"] == 999);
+    auto rejected = b.call("editDraftRow", {{"key", "trackers"}, {"index", 0u}, {"action", "remove"}}, revision);
+    CHECK(rejected["error"]["code"] == "STALE_REVISION");
+    CHECK(b.app->draft_json()["pages"]["trackers"]["total"] == 999);
+    auto invalid = b.call("getModelPage", {{"model", "draft"}, {"key", "trackers"}, {"limit", 0u}, {"revision", result["draft"]["revision"]}});
+    CHECK(invalid["error"]["code"] == "INVALID_ARGUMENT");
+    CHECK(b.call("editDraftRow", {{"key", "trackers"}, {"action", "remove"}})["error"]["code"] == "INVALID_PAYLOAD");
+}

@@ -58,6 +58,13 @@ public:
     // ServiceError(STALE_REVISION) so an edit is never applied to a draft the
     // user has not seen. std::nullopt skips the check (native callers).
     nlohmann::json draft_json() const;
+    // Bounded collections stay native-owned. Revision is mandatory for mutable views.
+    nlohmann::json model_page(std::string const& model, std::string const& key, std::string const& owner,
+        std::size_t offset, std::size_t limit, std::string const& revision) const;
+    nlohmann::json edit_draft_row(std::string const& key, std::string const& owner, std::size_t index,
+        std::string const& action, nlohmann::json const& value, std::optional<std::uint64_t> revision);
+    nlohmann::json model_text(std::string const& model, std::string const& key, std::string const& owner,
+        std::size_t offset, std::string const& revision) const;
     nlohmann::json add_sources(std::vector<std::filesystem::path> const& paths);
     nlohmann::json remove_source(std::string const& id, std::optional<std::uint64_t> revision);
     nlohmann::json set_source_options(std::string const& id, nlohmann::json const& options, std::optional<std::uint64_t> revision);
@@ -83,8 +90,9 @@ public:
     // ---- Batch --------------------------------------------------------------
     nlohmann::json plan_batch(std::string const& mode, std::string const& policy, std::filesystem::path const& output_dir);
     // `overrides`: {"item-1": {"policy":"replace","included":true}, ...}
-    nlohmann::json update_batch(nlohmann::json const& overrides);
-    std::vector<std::string> start_batch();
+    nlohmann::json update_batch(nlohmann::json const& overrides, std::string const& revision = {});
+    std::vector<std::string> start_batch(std::string const& revision = {});
+    nlohmann::json started_batch() const;
 
     // ---- Jobs -----------------------------------------------------------------
     JobScheduler& jobs() { return *jobs_; }
@@ -131,6 +139,7 @@ private:
     struct OpenedTorrent {
         std::filesystem::path path;
         std::shared_ptr<core::Metainfo const> meta;
+        nlohmann::json overview;
     };
     struct PendingEdit {
         std::string torrent_id;
@@ -147,6 +156,9 @@ private:
     void refresh_output_locked();
     std::optional<Profile> find_profile_locked(std::string const& id) const;
     nlohmann::json draft_json_locked() const;
+    nlohmann::json model_page_locked(std::string const& model, std::string const& key, std::string const& owner,
+        std::size_t offset, std::size_t limit, std::string const& revision) const;
+    nlohmann::json batch_json_locked() const;
     nlohmann::json summary_locked() const;
     nlohmann::json creation_settings_issues_locked() const;
     nlohmann::json validate_draft_locked() const;
@@ -170,6 +182,11 @@ private:
     std::jthread scan_thread_;
     AppSettings settings_;
     std::optional<BatchPlan> batch_;
+    std::uint64_t batch_revision_ = 0;
+    nlohmann::json batch_overrides_ = nlohmann::json::object();
+    std::map<std::string, std::vector<std::string>> batch_job_ids_;
+    std::string last_started_batch_;
+    std::uint64_t profiles_revision_ = 0;
     std::uint64_t next_batch_ = 1;
     std::map<std::string, OpenedTorrent> torrents_;
     std::uint64_t next_torrent_ = 1;

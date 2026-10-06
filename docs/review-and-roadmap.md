@@ -154,6 +154,11 @@ indices, пагинация verification и metadata, предел исходя�
 
 ## Дополнительное усиление перед выпуском
 
+Крупные draft/profile/batch/overview коллекции теперь доступны через
+[нативную пагинацию](model-pagination.md), правка одной строки сохраняет
+незагруженные данные. Ограничены страницы UI и выдача snapshot; полная память
+нативных моделей и frontend job history остаётся отдельным этапом измерений.
+
 - Проверка недоверенного metainfo: общие правила безопасных Windows-компонентов,
   path collisions, checked arithmetic и верхняя граница piece length перед
   преобразованием в int. Fuzz bencode/metainfo/verify под ASan/UBSan.

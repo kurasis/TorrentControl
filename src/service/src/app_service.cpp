@@ -4,6 +4,7 @@
 #include "tc/core/output.hpp"
 #include "tc/core/verify.hpp"
 #include "tc/service/sources.hpp"
+#include "view_paging.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -195,7 +196,28 @@ void AppService::wait_for_scan()
 
 json AppService::draft_json_locked() const
 {
-    json j = to_json(draft_);
+    json j = to_json(draft_, false);
+    j["profileMeta"] = nullptr;
+    for (auto const& profile : builtin_profiles())
+        if (profile.id == draft_.profile_id) j["profileMeta"] = view::profile(profile);
+    for (auto const& profile : settings_.custom_profiles)
+        if (profile.id == draft_.profile_id) { j["profileMeta"] = view::profile(profile); break; }
+    j["pages"] = json::object();
+    auto revision = std::to_string(draft_.revision);
+    for (auto const* key : {"sources", "trackers", "webSeeds"}) {
+        auto page = model_page_locked("draft", key, "", 0, 50, revision);
+        j[key] = std::move(page["items"]);
+        page.erase("items");
+        j["pages"][key] = std::move(page);
+    }
+    j["textFields"] = json::object();
+    for (auto const* key : {"name", "effectiveName", "comment", "creator", "source", "output"}) {
+        auto const& text = j[key].get_ref<std::string const&>();
+        if (text.size() > 512) {
+            j["textFields"][key] = text.size();
+            j[key] = view::preview(text);
+        }
+    }
     j["outputAuto"] = output_auto_;
     j["canUndo"] = !undo_.empty();
     j["scan"] = {{"state", scan_->state}, {"sourcesRevision", std::to_string(scan_->sources_revision)}};
@@ -329,9 +351,14 @@ json AppService::plan_profile(std::string const& id) const
     if (!p) throw ServiceError("NOT_FOUND", "No such profile");
     ProfilePlan const plan = service::plan_profile(draft_, *p);
     json changes = json::array();
-    for (auto const& c : plan.changes)
-        changes.push_back({{"field", c.field}, {"before", c.before}, {"after", c.after}, {"removesUserValue", c.removes_user_value}});
-    return json{{"profile", to_json(*p)}, {"changes", std::move(changes)}, {"draftRevision", std::to_string(draft_.revision)}};
+    for (auto const& c : plan.changes) {
+        bool const large = c.before.dump().size() + c.after.dump().size() > 8192;
+        changes.push_back({{"field", c.field}, {"before", large ? view::compact(c.before) : c.before},
+            {"after", large ? view::compact(c.after) : c.after}, {"removesUserValue", c.removes_user_value},
+            {"paged", large}, {"beforeTotal", c.before.is_array() ? c.before.size() : 0},
+            {"afterTotal", c.after.is_array() ? c.after.size() : 0}});
+    }
+    return json{{"profile", view::profile(*p)}, {"changes", std::move(changes)}, {"draftRevision", std::to_string(draft_.revision)}};
 }
 
 json AppService::apply_profile(std::string const& id, std::optional<std::uint64_t> revision)
@@ -458,7 +485,15 @@ json AppService::creation_settings_issues_locked() const
 json AppService::validate_draft() const
 {
     std::lock_guard lock(mutex_);
-    return validate_draft_locked();
+    auto value = validate_draft_locked();
+    for (auto const* key : {"issues", "review"}) {
+        auto const& rows = value[key];
+        auto page = view::page(rows.size(), 0, 50, std::to_string(draft_.revision),
+            [&](auto i) { return view::compact(rows[i]); });
+        value[std::string(key) + "Total"] = rows.size();
+        value[key] = std::move(page["items"]);
+    }
+    return value;
 }
 
 json AppService::validate_draft_locked() const
@@ -626,17 +661,33 @@ json AppService::plan_batch(std::string const& mode, std::string const& policy, 
     fs::path dir = output_dir;
     if (dir.empty() && !draft_.sources.empty()) dir = fs::absolute(draft_.sources.front().path).lexically_normal().parent_path();
     batch_ = service::plan_batch(draft_, *m, dir, *p);
-    return to_json(*batch_);
+    batch_overrides_ = json::object();
+    ++batch_revision_;
+    return batch_json_locked();
 }
 
-json AppService::update_batch(json const& overrides)
+json AppService::update_batch(json const& overrides, std::string const& revision)
 {
     std::lock_guard lock(mutex_);
     if (!batch_) throw ServiceError("NOT_FOUND", "No batch is planned");
+    if (!revision.empty() && revision != std::to_string(batch_revision_)) throw ServiceError("STALE_REVISION", "The batch plan changed", true);
     if (!overrides.is_object()) throw CoreError(ErrorCode::InvalidArgument, "overrides must be an object");
+    json next_overrides = batch_overrides_;
+    for (auto const& [id, change] : overrides.items()) {
+        auto found = std::find_if(batch_->items.begin(), batch_->items.end(), [&](auto const& row) { return row.id == id; });
+        if (found == batch_->items.end() || !change.is_object()) throw ServiceError("INVALID_ARGUMENT", "Unknown batch item");
+        for (auto const& [key, value] : change.items()) {
+            if (key == "policy") {
+                if (!value.is_string() || !conflict_policy_from(value.get<std::string>())) throw ServiceError("INVALID_ARGUMENT", "Invalid policy");
+            } else if (key == "included") {
+                if (!value.is_boolean()) throw ServiceError("INVALID_ARGUMENT", "Included must be boolean");
+            } else throw ServiceError("INVALID_ARGUMENT", "Unknown batch override");
+            next_overrides[id][key] = value;
+        }
+    }
     for (auto& item : batch_->items) {
-        auto it = overrides.find(item.id);
-        if (it == overrides.end()) continue;
+        auto it = next_overrides.find(item.id);
+        if (it == next_overrides.end()) continue;
         if (auto p = it->find("policy"); p != it->end()) {
             auto policy = p->is_string() ? conflict_policy_from(p->get<std::string>()) : std::nullopt;
             if (!policy) throw CoreError(ErrorCode::InvalidArgument, "invalid conflict policy");
@@ -645,24 +696,28 @@ json AppService::update_batch(json const& overrides)
     }
     resolve_conflicts(*batch_);
     for (auto& item : batch_->items) {
-        auto it = overrides.find(item.id);
-        if (it != overrides.end())
+        auto it = next_overrides.find(item.id);
+        if (it != next_overrides.end())
             if (auto inc = it->find("included"); inc != it->end() && inc->is_boolean() && !inc->get<bool>()) item.included = false;
     }
-    return to_json(*batch_);
+    batch_overrides_ = std::move(next_overrides);
+    ++batch_revision_;
+    return batch_json_locked();
 }
 
-std::vector<std::string> AppService::start_batch()
+std::vector<std::string> AppService::start_batch(std::string const& revision)
 {
     std::vector<CreateJobSpec> specs;
+    std::string batch_id;
     {
         std::lock_guard lock(mutex_);
         if (!batch_) throw ServiceError("NOT_FOUND", "No batch is planned");
+        if (!revision.empty() && revision != std::to_string(batch_revision_)) throw ServiceError("STALE_REVISION", "The batch plan changed", true);
         // Check the same settings as single creation under the snapshot lock.
         // Manifest/output validation remains per item in the worker.
         for (auto const& i : creation_settings_issues_locked())
             if (i["severity"] == "error") throw ServiceError("VALIDATION_FAILED", i["message"].get<std::string>());
-        std::string const batch_id = "batch-" + std::to_string(next_batch_++);
+        batch_id = "batch-" + std::to_string(next_batch_++);
         // The profile and settings are snapshotted now (section 4.3).
         core::CreateOptions const options = create_options(draft_, options_.now());
         for (auto const& item : batch_->items) {
@@ -682,6 +737,11 @@ std::vector<std::string> AppService::start_batch()
     if (specs.empty()) throw ServiceError("VALIDATION_FAILED", "Every batch item is skipped");
     std::vector<std::string> ids;
     for (auto& s : specs) ids.push_back(jobs_->enqueue_create(std::move(s)));
+    {
+        std::lock_guard lock(mutex_);
+        batch_job_ids_[batch_id] = ids;
+        last_started_batch_ = batch_id;
+    }
     return ids;
 }
 
@@ -711,7 +771,7 @@ json AppService::open_torrent(fs::path const& path)
     {
         std::lock_guard lock(mutex_);
         id = "t-" + std::to_string(next_torrent_++);
-        torrents_[id] = OpenedTorrent{fs::absolute(path).lexically_normal(), meta};
+        torrents_[id] = OpenedTorrent{fs::absolute(path).lexically_normal(), meta, nullptr};
     }
 
     auto decoded = [](std::string const& bytes) -> json {
@@ -756,6 +816,20 @@ json AppService::open_torrent(fs::path const& path)
     if (meta->info_hashes().v2) j["infohashV2"] = core::to_hex(*meta->info_hashes().v2);
     {
         std::lock_guard lock(mutex_);
+        torrents_.at(id).overview = std::move(j);
+        auto const& full = torrents_.at(id).overview;
+        j = json::object();
+        j["textFields"] = json::object();
+        for (auto const& [key, value] : full.items()) {
+            if (value.is_array()) {
+                auto page = model_page_locked("torrent", key, id, 0, 50, "");
+                j[key] = std::move(page["items"]);
+                j[key + "Total"] = value.size();
+            } else if (value.is_string() && value.get_ref<std::string const&>().size() > 512) {
+                j[key] = view::compact(value);
+                j["textFields"][key] = value.get_ref<std::string const&>().size();
+            } else j[key] = value;
+        }
         selected_torrent_ = j;
     }
     return j;
@@ -855,7 +929,8 @@ void AppService::save_settings_locked(AppSettings const& candidate) const
     if (options_.settings_path.empty()) return;
     try {
         save_settings(options_.settings_path, candidate);
-    } catch (CoreError const&) {
+    } catch (CoreError const& error) {
+        if (error.code() == ErrorCode::ResourceLimit) throw ServiceError("RESOURCE_LIMIT", "Settings exceed the 16 MiB file limit. Remove unused profiles or reduce their size. Your changes were not applied.");
         throw ServiceError("SETTINGS_WRITE_FAILED",
             "Could not save settings. Check free space and write access, then try again. Your changes were not applied.", true);
     }
@@ -864,8 +939,7 @@ void AppService::save_settings_locked(AppSettings const& candidate) const
 json AppService::settings_json() const
 {
     std::lock_guard lock(mutex_);
-    json j = to_json(settings_);
-    j.erase("customProfiles");
+    json j = to_json(settings_, false);
     j["persistence"] = options_.settings_path.empty() ? "memory" : "disk";
     return j;
 }
@@ -878,8 +952,7 @@ json AppService::update_settings(json const& patch)
     save_settings_locked(next);
     settings_ = std::move(next);
     jobs_->set_max_concurrent(settings_.max_concurrent_jobs);
-    json j = to_json(settings_);
-    j.erase("customProfiles");
+    json j = to_json(settings_, false);
     j["persistence"] = options_.settings_path.empty() ? "memory" : "disk";
     return j;
 }
@@ -887,14 +960,11 @@ json AppService::update_settings(json const& patch)
 json AppService::profiles_json() const
 {
     std::lock_guard lock(mutex_);
-    json list = json::array();
-    for (auto const& p : builtin_profiles()) list.push_back(to_json(p));
-    for (auto const& p : settings_.custom_profiles) {
-        json j = to_json(p);
-        // The page shows custom tracker URLs masked; the draft keeps them.
-        for (auto& t : j["trackers"]) t["url"] = redact_url(t["url"].get<std::string>());
-        list.push_back(std::move(j));
-    }
+    auto page = model_page_locked("profiles", "items", "", 0, 50, std::to_string(profiles_revision_));
+    json list = std::move(page["items"]);
+    // Keep the selected profile available even when it lies beyond the first page.
+    if (std::none_of(list.begin(), list.end(), [&](auto const& p) { return p["id"] == draft_.profile_id; }))
+        if (auto p = find_profile_locked(draft_.profile_id)) list.push_back(view::profile(*p));
     return list;
 }
 
@@ -917,8 +987,9 @@ json AppService::save_custom_profile(std::string const& name)
     save_settings_locked(next);
     settings_ = std::move(next);
     draft_.profile_id = p.id;
+    ++profiles_revision_;
     bump_locked(false);
-    return to_json(p);
+    return view::profile(p);
 }
 
 json AppService::delete_custom_profile(std::string const& id)
@@ -931,6 +1002,7 @@ json AppService::delete_custom_profile(std::string const& id)
     list.erase(it);
     save_settings_locked(next);
     settings_ = std::move(next);
+    ++profiles_revision_;
     return json{{"deleted", id}};
 }
 
@@ -949,7 +1021,9 @@ json AppService::snapshot() const
         {"profiles", profiles_json()}, {"diagnostics", diagnostics_->snapshot()}};
     j["jobsTotal"] = jobs["total"]; j["nextJobsOffset"] = jobs["nextOffset"]; j["jobsRevision"] = jobs["collectionRevision"];
     std::lock_guard lock(mutex_);
-    if (batch_) j["batch"] = to_json(*batch_);
+    j["profilesTotal"] = settings_.custom_profiles.size() + builtin_profiles().size();
+    j["profilesRevision"] = std::to_string(profiles_revision_);
+    if (batch_) j["batch"] = batch_json_locked();
     j["torrent"] = selected_torrent_;
     j["editorPreview"] = nullptr;
     if (!selected_torrent_.is_null()) {

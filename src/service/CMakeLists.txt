@@ -5,6 +5,7 @@ find_package(c-ares CONFIG REQUIRED)
 
 add_library(tc_service
     src/app_service.cpp
+    src/model_paging.cpp
     src/batch.cpp
     src/diagnostics.cpp
     src/network_probe.cpp
