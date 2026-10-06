@@ -114,6 +114,22 @@ test.describe("oversized legacy tracker", () => {
   });
 });
 
+test.describe("profile save acknowledgement", () => {
+  test.use({ mockConfig: `window.__mockConfig = { failSnapshotAfterStart: true, settings: { mode: "advanced" } };` });
+  test("a later snapshot read failure cannot turn a successful save into a retry", async ({ page }) => {
+    await page.goto("/index.html");
+    await page.locator("#tab-general").click();
+    await page.locator("#save-profile").click();
+    await page.locator("#profile-name").fill("Saved once");
+    await page.locator("#profile-name-save").click();
+    await expect(page.locator("#dialog")).not.toBeVisible();
+    await expect(page.locator("#draft-profile")).toHaveValue("custom-2");
+    const operations = await page.evaluate(() => window.__mock.requests);
+    expect(operations.filter((r) => r.operation === "saveProfile")).toHaveLength(1);
+    expect(operations.filter((r) => r.operation === "getSnapshot")).toHaveLength(1);
+  });
+});
+
 test.describe("paging failures", () => {
   test.use({ mockConfig: `window.__mockConfig = { modelPaging: true, sourcesCount: 100 };` });
   test("shows a failed read and retries without replaying a mutation", async ({ page }) => {

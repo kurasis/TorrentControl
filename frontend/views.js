@@ -473,10 +473,11 @@ function renderMetadataTab(state, actions) {
     field("draft-creator", t("creatorLabel"), textInput("draft-creator", "creator", d.creator, actions, { disabled: !!d.textFields?.creator })),
     field("draft-source", t("sourceLabel"), textInput("draft-source", "source", d.source, actions, { disabled: !!d.textFields?.source })),
     ...Object.keys(d.textFields ?? {}).filter((key) => d.textFields[key] > 65536).map((key) => {
+      const canReplace = ["name", "comment", "creator", "source"].includes(key);
       const replacement = h("input", { type: "text", maxlength: "4096", "aria-label": `${key}: ${t("replacementValue")}` });
       return h("div", { class: "field" }, h("p", { class: "note" }, `${key}: ${t("previewOnly")}`),
         h("button", { type: "button", onclick: () => actions.readModelText("draft", key, "", d.revision, key) }, t("details")),
-        replacement, h("button", { type: "button", onclick: () => actions.edit(key, replacement.value, { immediate: true }) }, t("replaceValue")));
+        canReplace ? replacement : null, canReplace ? h("button", { type: "button", onclick: () => actions.edit(key, replacement.value, { immediate: true }) }, t("replaceValue")) : null);
     }),
     note("optionalFieldsLater"));
 }

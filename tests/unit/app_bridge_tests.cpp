@@ -198,7 +198,11 @@ TEST_CASE("profile export is redacted by default", "[bridge][app][U05]")
     Bridge b;
     json draft = b.ok("applyProfile", {{"profileId", "private"}})["draft"];
     b.ok("updateDraft", {{"patch", {{"trackers", json::array({{{"url", "https://p.example/announce?passkey=TOPSECRET"}}})}}}});
-    std::string const id = b.ok("saveProfile", {{"name", "Mine: <b>bold</b>"}})["profileId"];
+    auto saved = b.ok("saveProfile", {{"name", "Mine: <b>bold</b>"}});
+    std::string const id = saved["profileId"];
+    CHECK(saved["profilesTotal"] == 5);
+    CHECK(saved["profilesRevision"] == "1");
+    CHECK(saved["draft"]["profileMeta"]["id"] == id);
     CHECK(b.ok("listProfiles").dump().find("TOPSECRET") == std::string::npos);
 
     fs::path const out = b.dir.path() / "export.json";
@@ -207,6 +211,10 @@ TEST_CASE("profile export is redacted by default", "[bridge][app][U05]")
     CHECK(r["redacted"] == true);
     CHECK(b.host.save_names.back() == "Mine_ _b_bold__b_.tcprofile.json");
     CHECK(tc::test::read_all(out).find("TOPSECRET") == std::string::npos);
+    auto deleted = b.ok("deleteProfile", {{"profileId", id}});
+    CHECK(deleted["profilesTotal"] == 4);
+    CHECK(deleted["profilesRevision"] == "2");
+    CHECK(deleted["draft"]["profileMeta"].is_null());
 }
 
 TEST_CASE("an opened torrent is described and verified through the bridge", "[bridge][app]")

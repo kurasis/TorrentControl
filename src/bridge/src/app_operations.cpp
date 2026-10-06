@@ -391,14 +391,17 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
     });
     d.register_operation("getSettings", [&app](json const&) { return app.settings_json(); });
     d.register_operation("updateSettings", [&app](json const& p) { return app.update_settings(object(p, "patch")); });
-    d.register_operation("listProfiles", [&app](json const&) { return json{{"profiles", app.profiles_json()}}; });
+    d.register_operation("listProfiles", [&app](json const&) { return app.profiles_state(); });
     d.register_operation("saveProfile", [&app](json const& p) {
         json const saved = app.save_custom_profile(str(p, "name", 200));
-        return json{{"profileId", saved["id"]}, {"profiles", app.profiles_json()}, {"draft", app.draft_json()}};
+        auto result = app.profiles_state();
+        result["profileId"] = saved["id"]; result["draft"] = app.draft_json();
+        return result;
     });
     d.register_operation("deleteProfile", [&app](json const& p) {
         app.delete_custom_profile(str(p, "profileId", 64));
-        return json{{"profiles", app.profiles_json()}};
+        auto result = app.profiles_state(); result["draft"] = app.draft_json();
+        return result;
     });
     d.register_operation("exportProfile", [&app, &host](json const& p) {
         json const exported = app.export_profile(str(p, "profileId", 64), flag(p, "includeSecrets"));

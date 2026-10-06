@@ -123,6 +123,7 @@ public:
     nlohmann::json settings_json() const;
     nlohmann::json update_settings(nlohmann::json const& patch);
     nlohmann::json profiles_json() const;
+    nlohmann::json profiles_state() const;
     nlohmann::json save_custom_profile(std::string const& name);
     nlohmann::json delete_custom_profile(std::string const& id);
     nlohmann::json export_profile(std::string const& id, bool include_secrets) const;
@@ -159,6 +160,7 @@ private:
     nlohmann::json model_page_locked(std::string const& model, std::string const& key, std::string const& owner,
         std::size_t offset, std::size_t limit, std::string const& revision) const;
     nlohmann::json batch_json_locked() const;
+    nlohmann::json profiles_json_locked() const;
     nlohmann::json summary_locked() const;
     nlohmann::json creation_settings_issues_locked() const;
     nlohmann::json validate_draft_locked() const;

@@ -139,6 +139,13 @@ function includeSelectedProfile(profile) {
   if (!state.profiles.some((item) => item.id === profile.id)) state.profiles.push(profile);
 }
 
+function applyProfileList(result) {
+  state.profiles = result.profiles;
+  state.profileBaseIds = new Set(result.profiles.slice(0, 50).map((profile) => profile.id));
+  state.profilesTotal = result.profilesTotal ?? result.profiles.length;
+  state.profilesRevision = result.profilesRevision ?? "0";
+}
+
 async function hydrateDraftText(draft) {
   for (const key of Object.keys(draft.textFields ?? {})) {
     // Normal draft text is at most 64 KiB. Oversized legacy profile values
@@ -301,14 +308,17 @@ export const actions = {
   async saveProfile() {
     await sendPatch();
     showSaveProfile(async (name) => {
-      await request("saveProfile", { name });
-      await refresh();
+      const result = await request("saveProfile", { name });
+      applyProfileList(result);
+      applyDraft(result.draft);
     });
   },
   async deleteProfile(profileId) {
     const r = await guarded(request("deleteProfile", { profileId }));
     if (r) {
-      await refresh();
+      applyProfileList(r);
+      if (r.draft) applyDraft(r.draft);
+      else invalidate();
     }
   },
   async exportProfile(profileId) {
@@ -598,11 +608,8 @@ async function refresh() {
   hydrateDraftText(snap.draft);
   state.scan = snap.scan;
   state.settings = snap.settings;
-  state.profiles = snap.profiles;
-  state.profileBaseIds = new Set(snap.profiles.slice(0, 50).map((profile) => profile.id));
+  applyProfileList(snap);
   includeSelectedProfile(snap.draft.profileMeta);
-  state.profilesTotal = snap.profilesTotal ?? snap.profiles.length;
-  state.profilesRevision = snap.profilesRevision ?? "0";
   state.diagnosticRun = (snap.diagnostics ?? []).at(-1) ?? null;
   if (state.diagnosticRun) {
     state.diagnosticPolicy.networkMode = state.diagnosticRun.network;

@@ -167,9 +167,13 @@
     checkSelfTestProfile: (p) => ({ persisted: config.selfTestPersistence !== false
       && profiles.some((profile) => profile.id === p.profileId && profile.name === p.name) }),
     getEngineInfo: () => ({ appVersion: "0.0.0-test", engineVersion: "libtorrent 2.1.2", protocolVersion: 1 }),
-    getSnapshot: () => ({ draft: snapshotDraft(), scan, jobs: config.pagedJobs ? jobs.slice(0, 50) : jobs,
+    getSnapshot: () => {
+      if (config.failSnapshotAfterStart && requests.filter((r) => r.operation === "getSnapshot").length > 1)
+        throw Object.assign(new Error("Snapshot read failed"), { code: "IO_ERROR" });
+      return { draft: snapshotDraft(), scan, jobs: config.pagedJobs ? jobs.slice(0, 50) : jobs,
       nextJobsOffset: config.pagedJobs && jobs.length > 50 ? 50 : null,
-      jobsTotal: jobs.length, jobsRevision: "1", settings, profiles: config.modelPaging ? profiles.slice(0, 50) : profiles, profilesTotal: profiles.length, profilesRevision: "0", torrent, editorPreview, diagnostics: diagnosticRun ? [diagnosticRun] : [] }),
+      jobsTotal: jobs.length, jobsRevision: "1", settings, profiles: config.modelPaging ? profiles.slice(0, 50) : profiles, profilesTotal: profiles.length, profilesRevision: "0", torrent, editorPreview, diagnostics: diagnosticRun ? [diagnosticRun] : [] };
+    },
     getJobsPage: (p) => ({ jobs: jobs.slice(p.offset, p.offset + p.limit), total: jobs.length, collectionRevision: "1",
       nextOffset: p.offset + p.limit < jobs.length ? p.offset + p.limit : null }),
     getVerifyFilesPage: (p) => {
@@ -295,7 +299,7 @@
     deleteProfile: (p) => {
       const index = profiles.findIndex((profile) => profile.id === p.profileId);
       if (index >= 0) profiles.splice(index, 1);
-      return { profiles };
+      return { profiles, draft: snapshotDraft() };
     },
     exportMagnet: () => ({ magnet: "magnet:?xt=urn:btih:0123456789012345678901234567890123456789&dn=Example" }),
     updateSettings: (p) => {

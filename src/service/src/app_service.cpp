@@ -960,6 +960,18 @@ json AppService::update_settings(json const& patch)
 json AppService::profiles_json() const
 {
     std::lock_guard lock(mutex_);
+    return profiles_json_locked();
+}
+
+json AppService::profiles_state() const
+{
+    std::lock_guard lock(mutex_);
+    return {{"profiles", profiles_json_locked()}, {"profilesTotal", settings_.custom_profiles.size() + builtin_profiles().size()},
+        {"profilesRevision", std::to_string(profiles_revision_)}};
+}
+
+json AppService::profiles_json_locked() const
+{
     auto page = model_page_locked("profiles", "items", "", 0, 50, std::to_string(profiles_revision_));
     json list = std::move(page["items"]);
     // Keep the selected profile available even when it lies beyond the first page.

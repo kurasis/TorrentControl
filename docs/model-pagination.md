@@ -54,6 +54,10 @@ saves now fail before replacing the previous file. Settings retain their
 **16 MiB** limit, now enforced on both reading and writing; a rejected settings
 candidate does not change live preferences/profiles.
 
+Profile save/delete acknowledgements include collection totals, revision and
+the resulting draft. The UI uses that acknowledgement directly, so an unrelated
+snapshot read failure cannot turn a successful save into an apparent failure.
+
 Verification includes a native 100,000-source project larger than 16 MiB,
 cursor traversal of 1,000 escaped tracker URLs, edits preserving unseen rows,
 stale page/write rejection, 75 profiles with large tracker collections,
@@ -62,7 +66,8 @@ preservation, UTF-8 text chunk boundaries and oversized persistence failures.
 Browser cases navigate 100,000 sources, edit final tracker/seed/exclusion rows,
 select profiles outside the summary, preserve batch exclusions across pages,
 retry read failures and display hostile imported text without markup.
-Local validation passed **166 Linux CTest cases** and **45 Chromium UI cases**.
+Local validation passed **166 Linux CTest cases** and **46 Chromium UI cases**,
+including a snapshot read failure after a successful profile save.
 
 This bounds the new transport and view paths, not the entire process tree.
 The native model still retains complete source mappings, profiles, imported
