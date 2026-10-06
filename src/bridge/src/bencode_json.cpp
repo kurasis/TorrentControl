@@ -155,6 +155,7 @@ private:
 std::string bytes_from_json(nlohmann::json const& j)
 {
     if (!j.is_object() || !j.contains("t") || !j["t"].is_string()) bad("missing tag");
+    if (j.contains("truncated") && !j["truncated"].is_boolean()) bad("truncated must be a boolean");
     if (j.value("truncated", false)) bad("a truncated display value cannot be saved");
     std::string const t = j["t"];
     if (t == "str") {
@@ -177,6 +178,7 @@ Value value_from_json(nlohmann::json const& j, int depth)
 {
     if (depth > 128) bad("nesting too deep");
     if (!j.is_object() || !j.contains("t") || !j["t"].is_string()) bad("missing tag");
+    if (j.contains("truncated") && !j["truncated"].is_boolean()) bad("truncated must be a boolean");
     if (j.value("truncated", false)) bad("a truncated display value cannot be saved");
     std::string const t = j["t"];
     if (t == "int") {

@@ -21,8 +21,10 @@ namespace {
 
 // Values from the Windows SDK, repeated so the classification compiles and is
 // tested on every platform.
+#ifdef _WIN32
 constexpr std::uint32_t attr_hidden = 0x2;
 constexpr std::uint32_t attr_system = 0x4;
+#endif
 constexpr std::uint32_t attr_directory = 0x10;
 constexpr std::uint32_t attr_device = 0x40;
 constexpr std::uint32_t attr_reparse_point = 0x400;

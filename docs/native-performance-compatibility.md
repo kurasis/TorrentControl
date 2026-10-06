@@ -116,4 +116,7 @@ can still be refused instead of automatically paginated.
    cross-check with a mature independent v2 client such as BiglyBT and verify
    both hybrid hash families independently. Preserve every existing raw-info
    and canonical-layout guarantee while investigating.
-4. Complete fuzz/sanitizer runs. Distribution/clean-machine release gates remain M4.
+4. The [bounded fuzz/sanitizer package](fuzz-sanitizers.md) instruments project
+   code and adds parser/edit/JSON campaigns. Larger inputs, further subsystems,
+   dependencies and Windows instrumentation remain open. Distribution and
+   clean-machine release gates remain M4.
