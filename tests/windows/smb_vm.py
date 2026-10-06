@@ -193,7 +193,7 @@ class SmbVm:
         self.console.send('root\n')
         self.console.expect(r'localhost:.*# ', end, timeout=30)
         self.console.command("stty -echo; unset HISTFILE; PS1=''; PS2=''")
-        self.console.command('ip link set eth0 up && udhcpc -i eth0 -q -n -t 5', timeout=60)
+        self.console.command('ip link set lo up && ip link set eth0 up && udhcpc -i eth0 -q -n -t 5', timeout=60)
         repository = f'http://10.0.2.2:{self.packages.server.server_port}'
         self.console.command(f"printf '%s\\n' '{repository}' > /etc/apk/repositories")
         self.console.command('apk add --no-cache samba-server samba-common-tools samba-client', timeout=240)
