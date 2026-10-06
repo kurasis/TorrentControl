@@ -25,7 +25,11 @@ this package does not claim bounded cancellation of stalled Windows/UNC I/O.
 Local Linux validation passed 139/139 CTest entries and 30/30 Chromium UI
 tests. The retained real-filesystem fixture benchmark also passed with
 100,000 files and 1,000 filtered matches. Windows heartbeat evidence is
-validated separately in CI and must be inspected before merging this package.
+validated separately in CI. PR #6 passed Windows/Linux/UI CI. Its Windows
+report measured 243 native timer ticks and 245 WebView2 frames during the
+100,000-file workflow, with maximum gaps of 16 ms and 15.8 ms respectively.
+Dialogs, metadata editing, network diagnostics, renderer recovery and settings
+restart also passed. Measurements are observations of that hosted runner.
 
 Portable regression checks cover worker-thread execution/FIFO ordering, page
 generation changes without replaying queued mutations, saturation and busy

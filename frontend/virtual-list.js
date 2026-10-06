@@ -2,6 +2,8 @@
 // (plus a small margin) exist in the DOM, whatever the total; rows are
 // fetched in pages from the native side and cached.
 const PAGE = 250;
+const MAX_CACHED_PAGES = 8;
+const MAX_IN_FLIGHT = 4;
 
 export class VirtualList {
   // fetchPage(offset, limit) -> Promise<{ total, items }>
@@ -44,7 +46,7 @@ export class VirtualList {
   }
 
   async load(page) {
-    if (this.pages.has(page) || this.loading.has(page)) return;
+    if (this.pages.has(page) || this.loading.has(page) || this.loading.size >= MAX_IN_FLIGHT) return;
     const generation = this.generation;
     this.loading.add(page);
     try {
@@ -52,6 +54,7 @@ export class VirtualList {
       if (generation !== this.generation) return; // stale
       this.total = Number(result.total ?? 0);
       this.pages.set(page, result.items ?? []);
+      while (this.pages.size > MAX_CACHED_PAGES) this.pages.delete(this.pages.keys().next().value);
       for (const [index, row] of this.rows) {
         if (Math.floor(index / PAGE) === page) {
           row.remove();
@@ -61,17 +64,24 @@ export class VirtualList {
     } catch {
       // Leave the page unloaded; scrolling retries it.
     } finally {
-      this.loading.delete(page);
+      if (generation === this.generation) this.loading.delete(page);
     }
     this.render();
   }
 
   item(index) {
-    const page = this.pages.get(Math.floor(index / PAGE));
+    const key = Math.floor(index / PAGE);
+    const page = this.pages.get(key);
+    if (page) { this.pages.delete(key); this.pages.set(key, page); }
     return page ? page[index % PAGE] : undefined;
   }
 
   render() {
+    if (!this.container.isConnected) {
+      this.resizeObserver.disconnect();
+      this.pages.clear();
+      return;
+    }
     this.spacer.style.height = `${this.total * this.rowHeight}px`;
     const height = this.container.clientHeight || 400;
     const first = Math.max(0, Math.floor(this.container.scrollTop / this.rowHeight) - 10);

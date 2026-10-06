@@ -11,7 +11,8 @@
 //   list        {"t":"list","items":[...]}
 //   dictionary  {"t":"dict","entries":[{"key":<string>,"value":<value>},...]}
 // Keys are tagged byte strings too. Large structures are shown lazily: once
-// the node budget is used up, values become {"t":"elided","nodes":N}, and long
+// a display budget is used up, values become {"t":"elided"} (with a direct
+// child count for containers), and long
 // strings carry only a prefix with "truncated":true. Elided or truncated
 // values cannot be converted back; the original bytes stay in the native
 // model and are never rebuilt from a display copy.
@@ -27,6 +28,8 @@ namespace tc::bridge {
 struct DisplayBudget {
     std::size_t max_nodes = 10'000;
     std::size_t max_string_bytes = 4'096;
+    // Aggregate display bound, including worst-case JSON escaping; minimum 128.
+    std::size_t max_output_bytes = 256 * 1024;
 };
 
 nlohmann::json bencode_to_json(core::bencode::Value const& value, DisplayBudget const& budget = {});

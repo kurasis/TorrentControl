@@ -5,7 +5,7 @@ import { applyTranslations, setLocale, t } from "./i18n.js";
 import { isAvailable, onEvent, request, requestWithFiles } from "./bridge.js";
 import { debounce, toast } from "./dom.js";
 import { renderWorkspace, renderReview, renderJobs, workspaceKey } from "./views.js";
-import { showResult, showProfileChange, showBatch, showConfirm, showSaveProfile, showMagnetCopy, closeDialog } from "./dialogs.js";
+import { showResult, showProfileChange, showBatch, showConfirm, showSaveProfile, showMagnetCopy, showVerifyFile, showJobText, showJobLayoutRow, closeDialog } from "./dialogs.js";
 import { loadMetadata } from "./metadata-editor.js";
 
 export const state = {
@@ -400,6 +400,22 @@ export const actions = {
   skippedPage: (offset, limit) => request("getSkippedPage", { offset, limit }),
   torrentFilesPage: (torrentId, offset, limit) =>
     request("getTorrentFiles", { torrentId, offset, limit }).then((r) => ({ total: r.total, items: r.files })),
+  verifyFilesPage: (jobId, offset, limit, errorsOnly) =>
+    request("getVerifyFilesPage", { jobId, offset, limit, errorsOnly }).then((r) => ({ total: r.total, items: r.rows })),
+  jobLayoutPage: (jobId, offset, limit) => request("getJobLayoutPage", { jobId, offset, limit }),
+  async jobLayoutDetails(jobId, index) {
+    const result = await guarded(request("getJobLayoutRow", { jobId, index }));
+    if (result) showJobLayoutRow(result);
+  },
+  jobTextPage: (jobId, kind, offset, limit) => request("getJobTextPage", { jobId, kind, offset, limit }),
+  async jobTextDetails(jobId, kind, index, version) {
+    const result = await guarded(request("getJobText", { jobId, kind, index, version }));
+    if (result) showJobText(kind, result.text);
+  },
+  async verifyFileDetails(jobId, index) {
+    const result = await guarded(request("getVerifyFile", { jobId, index }));
+    if (result) showVerifyFile(result.file);
+  },
 };
 
 function isTerminal(s) {
@@ -454,6 +470,7 @@ onEvent((type, payload) => {
     invalidate();
     validateSoon();
   }
+  else if (type === "resyncRequired") refresh().catch((error) => toast(error.message, "error"));
 });
 
 // ---- Settings, snapshot and start ------------------------------------------------
@@ -471,7 +488,22 @@ function applySettings() {
 }
 
 async function refresh() {
-  const snap = await request("getSnapshot");
+  let snap;
+  for (let attempt = 0; attempt < 3; ++attempt) {
+    snap = await request("getSnapshot");
+    let next = snap.nextJobsOffset;
+    let consistent = true;
+    while (next !== null && next !== undefined) {
+      const page = await request("getJobsPage", { offset: next, limit: 50 });
+      if (page.collectionRevision !== snap.jobsRevision) { consistent = false; break; }
+      if (page.nextOffset !== null && page.nextOffset <= next) throw new Error("Job pagination did not advance");
+      snap.jobs.push(...page.jobs);
+      next = page.nextOffset;
+    }
+    if (consistent) break;
+    snap = null;
+  }
+  if (!snap) throw new Error("Jobs changed while refreshing; try again");
   state.draft = snap.draft;
   state.scan = snap.scan;
   state.settings = snap.settings;

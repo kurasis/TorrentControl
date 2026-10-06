@@ -92,33 +92,95 @@ bool is_valid_transition(JobState from, JobState to) noexcept
     return false;
 }
 
-json to_json(JobSnapshot const& s)
+namespace {
+std::string preview_text(std::string const& text, std::size_t limit = 512)
+{
+    if (text.size() <= limit) return text;
+    while (limit && (static_cast<unsigned char>(text[limit]) & 0xc0) == 0x80) --limit;
+    return text.substr(0, limit) + "…";
+}
+
+json preview_row(json const& row, std::size_t index)
+{
+    json result = row;
+    result["index"] = index;
+    for (char const* key : {"path", "message"}) {
+        auto const text = row.value(key, std::string{});
+        result[key] = preview_text(text, 256);
+        if (text.size() > 256) result["displayTruncated"] = true;
+    }
+    return result;
+}
+}
+
+json to_json(JobSnapshot const& s, bool bridge_preview)
 {
     json j{{"id", s.id}, {"kind", s.kind == JobKind::Create ? "create" : "verify"}, {"name", s.name},
         {"batchId", s.batch_id}, {"state", std::string(to_string(s.state))},
         {"bytesDone", std::to_string(s.bytes_done)}, {"bytesTotal", std::to_string(s.bytes_total)},
         {"bytesPerSecond", s.bytes_per_second}, {"currentFile", s.current_file}, {"filesDone", s.files_done},
-        {"filesTotal", s.files_total}, {"log", s.log}, {"version", std::to_string(s.version)}};
+        {"filesTotal", s.files_total}, {"version", std::to_string(s.version)}};
+    j["log"] = json::array();
+    auto const log_start = bridge_preview && s.log.size() > 5 ? s.log.size() - 5 : 0;
+    for (std::size_t i = log_start; i < s.log.size(); ++i) j["log"].push_back(bridge_preview ? preview_text(s.log[i]) : s.log[i]);
+    if (bridge_preview) {
+        j["logTotal"] = s.log.size(); j["logTruncated"] = log_start != 0;
+        j["name"] = preview_text(s.name); j["currentFile"] = preview_text(s.current_file);
+    }
     j["etaSeconds"] = s.eta_seconds ? json(*s.eta_seconds) : json(nullptr);
     if (s.error) {
         json e{{"code", s.error->code}, {"message", s.error->message}, {"phase", s.error->phase},
             {"sourceId", s.error->source_id}, {"retryable", s.error->retryable}};
         if (s.error->os_error) e["osError"] = *s.error->os_error;
+        if (bridge_preview) e["message"] = preview_text(s.error->message);
         j["error"] = std::move(e);
     }
     if (s.result) {
         auto const& r = *s.result;
         json layout = json::array();
-        for (auto const& [torrent_path, local] : r.layout) layout.push_back({{"torrentPath", torrent_path}, {"local", local}});
+        for (std::size_t i = 0; i < r.layout.size() && (!bridge_preview || i < 5); ++i) {
+            auto const& [torrent_path, local] = r.layout[i];
+            layout.push_back({{"torrentPath", bridge_preview ? preview_text(torrent_path) : torrent_path},
+                {"local", bridge_preview ? preview_text(local) : local}});
+        }
         j["result"] = {{"output", core::to_utf8(r.output)}, {"name", r.torrent_name}, {"format", r.format},
             {"infohashV1", r.infohash_v1}, {"infohashV2", r.infohash_v2}, {"magnet", r.magnet},
             {"pieceLength", r.piece_length}, {"numPieces", r.num_pieces}, {"payloadBytes", std::to_string(r.payload_bytes)},
             {"paddingBytes", std::to_string(r.padding_bytes)}, {"realFiles", r.real_files},
             {"paddingFiles", r.padding_files}, {"metainfoBytes", std::to_string(r.metainfo_bytes)},
             {"replacedExisting", r.replaced_existing}, {"guaranteeNote", r.guarantee_note}, {"layout", std::move(layout)},
-            {"warnings", r.warnings}};
+            {"warnings", bridge_preview ? json::array() : json(r.warnings)}};
+        if (bridge_preview) {
+            auto& result = j["result"];
+            result["output"] = preview_text(core::to_utf8(r.output));
+            result["name"] = preview_text(r.torrent_name); result["magnet"] = preview_text(r.magnet);
+            result["guaranteeNote"] = preview_text(r.guarantee_note);
+            result["layoutTotal"] = r.layout.size(); result["layoutTruncated"] = r.layout.size() > 5 || r.real_files > r.layout.size();
+            result["warnings"] = json::array();
+            for (std::size_t i = 0; i < r.warnings.size() && i < 5; ++i) result["warnings"].push_back(preview_text(r.warnings[i]));
+            result["warningsTotal"] = r.warnings.size();
+            result["warningsTruncated"] = r.warnings.size() > 5
+                || std::any_of(r.warnings.begin(), r.warnings.end(), [](auto const& text) { return text.size() > 512; });
+        }
     }
-    if (!s.verify.is_null()) j["verify"] = s.verify;
+    if (!s.verify.is_null()) {
+        if (!bridge_preview) j["verify"] = s.verify;
+        else {
+            json report = json::object();
+            for (auto it = s.verify.begin(); it != s.verify.end(); ++it) {
+                if (it.key() == "files") continue;
+                if (it.key() == "metainfoProblems") {
+                    report[it.key()] = json::array();
+                    for (std::size_t i = 0; i < it->size() && i < 5; ++i) report[it.key()].push_back(preview_text(it->at(i).get<std::string>()));
+                } else report[it.key()] = it.value();
+            }
+            auto const& files = s.verify.at("files");
+            report["files"] = json::array();
+            for (std::size_t i = 0; i < files.size() && i < 2; ++i) report["files"].push_back(preview_row(files[i], i));
+            report["filesTotal"] = files.size(); report["filesTruncated"] = files.size() > 2;
+            j["verify"] = std::move(report);
+        }
+    }
     return j;
 }
 
@@ -126,6 +188,7 @@ struct JobScheduler::Job {
     JobSnapshot snap;
     std::optional<CreateJobSpec> create;
     std::optional<VerifyJobSpec> verify;
+    std::vector<std::size_t> verification_errors;
     std::stop_source stop;
     core::PauseControl pause;
     std::jthread thread;
@@ -215,6 +278,7 @@ std::string JobScheduler::enqueue_create(CreateJobSpec spec)
     std::string const id = ref.snap.id;
     jobs_.emplace(id, std::move(job));
     order_.push_back(id);
+    ++collection_revision_;
     log(ref, "Queued");
     notify(ref, lock);
     schedule_locked();
@@ -234,6 +298,7 @@ std::string JobScheduler::enqueue_verify(VerifyJobSpec spec)
     std::string const id = ref.snap.id;
     jobs_.emplace(id, std::move(job));
     order_.push_back(id);
+    ++collection_revision_;
     log(ref, "Queued for verification");
     notify(ref, lock);
     schedule_locked();
@@ -446,6 +511,9 @@ void JobScheduler::run_verify(Job& job)
             files.push_back({{"path", f.torrent_path}, {"status", std::string(core::to_string(f.status))},
                 {"message", f.message}, {"badV1Pieces", std::to_string(f.bad_v1_pieces)},
                 {"badV2Pieces", std::to_string(f.bad_v2_pieces)}});
+        job.verification_errors.clear();
+        for (std::size_t i = 0; i < files.size(); ++i)
+            if (files[i]["status"] != "ok") job.verification_errors.push_back(i);
         job.snap.verify = {{"ok", r.ok}, {"metainfoProblems", r.metainfo_problems},
             {"v1PiecesTotal", std::to_string(r.v1_pieces_total)}, {"v1PiecesBad", std::to_string(r.v1_pieces_bad)},
             {"v2FilesChecked", std::to_string(r.v2_files_checked)}, {"v2FilesBad", std::to_string(r.v2_files_bad)},
@@ -534,6 +602,7 @@ void JobScheduler::clear_finished()
         }
     }
     order_ = std::move(keep);
+    ++collection_revision_;
 }
 
 void JobScheduler::set_max_concurrent(int n)
@@ -557,6 +626,113 @@ std::optional<JobSnapshot> JobScheduler::find(std::string const& id) const
     auto it = jobs_.find(id);
     if (it == jobs_.end()) return std::nullopt;
     return it->second->snap;
+}
+
+json JobScheduler::bridge_page(std::size_t offset, std::size_t limit) const
+{
+    std::lock_guard lock(mutex_);
+    json rows = json::array();
+    std::size_t bytes = 0;
+    limit = std::min(limit, std::size_t(50));
+    for (std::size_t i = offset; i < order_.size() && rows.size() < limit; ++i) {
+        auto row = to_json(jobs_.at(order_[i])->snap, true);
+        auto const size = row.dump(-1, ' ', false, json::error_handler_t::replace).size();
+        if (size > 256 * 1024) throw ServiceError("RESULT_TOO_LARGE", "The job summary exceeds its display budget");
+        if (!rows.empty() && size > 256 * 1024 - bytes) break;
+        bytes += size;
+        rows.push_back(std::move(row));
+    }
+    auto const next = offset + rows.size();
+    return {{"jobs", std::move(rows)}, {"total", order_.size()},
+        {"nextOffset", next < order_.size() ? json(next) : json(nullptr)},
+        {"collectionRevision", std::to_string(collection_revision_)}};
+}
+
+json JobScheduler::verification_page(std::string const& id, std::size_t offset, std::size_t limit, bool errors_only) const
+{
+    std::lock_guard lock(mutex_);
+    auto it = jobs_.find(id);
+    if (it == jobs_.end()) throw ServiceError("JOB_NOT_FOUND", "No such verification job");
+    auto const& job = *it->second;
+    if (job.snap.kind != JobKind::Verify) throw ServiceError("INVALID_STATE", "This job has no verification report");
+    json rows = json::array();
+    auto const& report = job.snap.verify;
+    auto const files = report.is_null() ? 0 : report.at("files").size();
+    auto const total = errors_only ? job.verification_errors.size() : files;
+    limit = std::min(limit, std::size_t(250));
+    for (std::size_t i = offset; i < total && rows.size() < limit; ++i) {
+        auto index = errors_only ? job.verification_errors[i] : i;
+        rows.push_back(preview_row(report.at("files")[index], index));
+    }
+    return {{"rows", std::move(rows)}, {"total", total}, {"filesTotal", files}, {"version", std::to_string(job.snap.version)}};
+}
+
+json JobScheduler::verification_file(std::string const& id, std::size_t index) const
+{
+    std::lock_guard lock(mutex_);
+    auto it = jobs_.find(id);
+    if (it == jobs_.end()) throw ServiceError("JOB_NOT_FOUND", "No such verification job");
+    auto const& report = it->second->snap.verify;
+    if (report.is_null() || index >= report.at("files").size()) throw ServiceError("NOT_FOUND", "No such verified file");
+    return {{"file", report.at("files")[index]}, {"version", std::to_string(it->second->snap.version)}};
+}
+
+json JobScheduler::layout_page(std::string const& id, std::size_t offset, std::size_t limit) const
+{
+    std::lock_guard lock(mutex_);
+    auto it = jobs_.find(id);
+    if (it == jobs_.end()) throw ServiceError("JOB_NOT_FOUND", "No such job");
+    if (!it->second->snap.result) throw ServiceError("INVALID_STATE", "This job has no creation result");
+    auto const& result = *it->second->snap.result;
+    json rows = json::array();
+    limit = std::min(limit, std::size_t(50));
+    for (std::size_t i = offset; i < result.layout.size() && rows.size() < limit; ++i)
+        rows.push_back({{"torrentPath", preview_text(result.layout[i].first)}, {"local", preview_text(result.layout[i].second)},
+            {"index", i}, {"displayTruncated", result.layout[i].first.size() > 512 || result.layout[i].second.size() > 512}});
+    return {{"rows", std::move(rows)}, {"total", result.layout.size()}, {"realFiles", result.real_files},
+        {"complete", result.layout.size() == result.real_files}};
+}
+
+json JobScheduler::layout_row(std::string const& id, std::size_t index) const
+{
+    std::lock_guard lock(mutex_);
+    auto it = jobs_.find(id);
+    if (it == jobs_.end()) throw ServiceError("JOB_NOT_FOUND", "No such job");
+    if (!it->second->snap.result || index >= it->second->snap.result->layout.size())
+        throw ServiceError("NOT_FOUND", "No such retained mapping row");
+    auto const& row = it->second->snap.result->layout[index];
+    return {{"torrentPath", row.first}, {"local", row.second}};
+}
+
+json JobScheduler::text_page(std::string const& id, std::string const& kind, std::size_t offset, std::size_t limit) const
+{
+    std::lock_guard lock(mutex_);
+    auto it = jobs_.find(id);
+    if (it == jobs_.end()) throw ServiceError("JOB_NOT_FOUND", "No such job");
+    auto const& job = it->second->snap;
+    if (kind != "log" && kind != "warnings") throw ServiceError("INVALID_PAYLOAD", "Unknown job text collection");
+    if (kind == "warnings" && !job.result) throw ServiceError("INVALID_STATE", "This job has no creation warnings");
+    auto const& lines = kind == "log" ? job.log : job.result->warnings;
+    json rows = json::array();
+    limit = std::min(limit, std::size_t(50));
+    for (std::size_t i = offset; i < lines.size() && rows.size() < limit; ++i)
+        rows.push_back({{"index", i}, {"text", preview_text(lines[i])}, {"displayTruncated", lines[i].size() > 512}});
+    return {{"rows", std::move(rows)}, {"total", lines.size()}, {"version", std::to_string(job.version)}};
+}
+
+json JobScheduler::text_detail(std::string const& id, std::string const& kind, std::size_t index, std::string const& version) const
+{
+    std::lock_guard lock(mutex_);
+    auto it = jobs_.find(id);
+    if (it == jobs_.end()) throw ServiceError("JOB_NOT_FOUND", "No such job");
+    auto const& job = it->second->snap;
+    if (!version.empty() && version != std::to_string(job.version))
+        throw ServiceError("STALE_JOB", "The job changed; refresh its text page", true);
+    if (kind != "log" && kind != "warnings") throw ServiceError("INVALID_PAYLOAD", "Unknown job text collection");
+    if (kind == "warnings" && !job.result) throw ServiceError("INVALID_STATE", "This job has no creation warnings");
+    auto const& lines = kind == "log" ? job.log : job.result->warnings;
+    if (index >= lines.size()) throw ServiceError("NOT_FOUND", "No such job text row");
+    return {{"text", lines[index]}, {"version", std::to_string(job.version)}};
 }
 
 bool JobScheduler::has_active() const

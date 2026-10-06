@@ -97,7 +97,13 @@ command handling off the Windows UI thread and adds a real WebView2/Win32
 heartbeat gate over 100,000 files. It does not remove service mutex contention
 or make running filesystem calls cancellable.
 
-1. Complete outgoing bridge bounds for large verification/job/import data.
+The [outgoing bridge package](bounded-outgoing-bridge.md) adds a 1 MiB
+transport limit, compact/paged job and verification data and aggregate
+metadata display budgets. Large unpaged overview/draft/profile/batch objects
+can still be refused instead of automatically paginated.
+
+1. Extend native paging to remaining large overview/draft/profile/batch data
+   and avoid full internal report copies where only summaries are needed.
 2. Measure creation peak memory and I/O on large trees and stalled/UNC sources.
    Existing instrumented hybrid tests prove one payload read pass on their
    local fixtures, not stalled Windows I/O cancellation.

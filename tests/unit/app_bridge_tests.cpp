@@ -2,6 +2,7 @@
 // (specification section 13; fixtures U01, U03).
 
 #include "tc/bridge/app_operations.hpp"
+#include "tc/bridge/bencode_json.hpp"
 #include "tc/bridge/protocol.hpp"
 #include "tc/core/metainfo.hpp"
 
@@ -352,4 +353,47 @@ TEST_CASE("diagnostics bridge requires native targets and an explicit valid conn
     CHECK(b.call("startDiagnostics", {{"kind","trackers"},{"networkMode","direct"},{"httpProxy","http://127.0.0.1:1"}})["error"]["code"] == "INVALID_PROXY");
     CHECK(b.call("getDiagnosticPage", {{"runId","not-native"},{"offset",0},{"limit",51}})["ok"] == false);
     CHECK(b.app->snapshot()["diagnostics"].empty());
+}
+
+TEST_CASE("metadata field cursors page large binary keys without losing editable native bytes", "[bridge][editor][bounds]")
+{
+    Bridge b;
+    auto payload = b.dir.path() / "payload.bin";
+    tc::test::write_file(payload, 32, 1);
+    b.app->add_sources({payload}); b.app->wait_for_scan();
+    b.app->update_draft({{"trackers", json::array()}}, std::nullopt);
+    auto job = b.app->start_create(); b.app->jobs().wait_idle();
+    auto original = b.app->open_torrent(b.app->jobs().find(job)->result->output);
+    auto meta = b.app->torrent_metainfo(original["id"]);
+    core::OuterEdit patch;
+    for (int i = 0; i < 100; ++i) {
+        auto prefix = "extension-" + std::to_string(1000 + i);
+        patch[prefix + std::string(4096 - prefix.size(), '\0')] = core::bencode::Value::string("preserved");
+    }
+    auto extended = b.dir.path() / "extended.torrent";
+    service::write_file_atomic(extended, core::apply_outer_edit(*meta, patch));
+    b.host.opens.push_back({extended});
+    auto torrent = b.ok("openTorrent")["torrent"];
+    std::size_t offset = 0, seen = 0, pages = 0;
+    for (;;) {
+        auto page = b.ok("getTorrentFields", {{"torrentId", torrent["id"]}, {"scope", "top"}, {"offset", offset}, {"limit", 50}});
+        CHECK(page.dump().size() < 256 * 1024 + 128);
+        ++pages;
+        for (auto const& row : page["rows"]) {
+            auto key = bridge::bencode_from_json(row["key"]).text();
+            if (!key.starts_with("extension-")) continue;
+            CHECK(key.size() == 4096);
+            auto value = b.ok("getTorrentField", {{"torrentId", torrent["id"]}, {"scope", "top"}, {"key", row["key"]}});
+            CHECK(value["value"]["utf8"] == "preserved");
+            CHECK(value["editable"] == true);
+            ++seen;
+        }
+        if (page["nextOffset"].is_null()) break;
+        auto next = page["nextOffset"].get<std::size_t>();
+        REQUIRE(next > offset);
+        offset = next;
+    }
+    CHECK(seen == 100);
+    CHECK(pages > 2); // byte budget, rather than only a row-count budget
+    CHECK(b.app->torrent_metainfo(torrent["id"])->raw_info() == meta->raw_info());
 }

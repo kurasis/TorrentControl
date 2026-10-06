@@ -28,6 +28,7 @@ namespace tc::bridge {
 
 inline constexpr int protocol_version = 1;
 inline constexpr std::size_t max_message_bytes = 1024 * 1024;
+// Applies to both incoming messages and serialized responses/events.
 
 // Origin the bundled frontend is served from (virtual host mapping).
 inline constexpr std::string_view app_origin = "https://torrentcontrol.example";

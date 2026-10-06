@@ -5,6 +5,8 @@
 #include "tc/service/jobs.hpp"
 
 #include <algorithm>
+#include <ostream>
+#include <streambuf>
 
 namespace tc::bridge {
 
@@ -31,10 +33,49 @@ json error_response(json request_id, std::string code, std::string message, bool
         {"error", {{"code", std::move(code)}, {"message", std::move(message)}, {"retryable", retryable}}}};
 }
 
+struct OutputLimit : std::exception {};
+
+class LimitedBuffer final : public std::streambuf {
+public:
+    std::string bytes;
+protected:
+    std::streamsize xsputn(char const* text, std::streamsize count) override
+    {
+        auto const size = static_cast<std::size_t>(count);
+        if (size > max_message_bytes - bytes.size()) throw OutputLimit{};
+        bytes.append(text, size);
+        return count;
+    }
+    int_type overflow(int_type value) override
+    {
+        if (traits_type::eq_int_type(value, traits_type::eof())) return traits_type::not_eof(value);
+        if (bytes.size() == max_message_bytes) throw OutputLimit{};
+        bytes.push_back(traits_type::to_char_type(value));
+        return value;
+    }
+};
+
+std::optional<std::string> limited_serialize(json const& j)
+{
+    LimitedBuffer buffer;
+    std::ostream stream(&buffer);
+    stream.exceptions(std::ios::badbit | std::ios::failbit);
+    try {
+        // Use the pinned JSON library's streaming serializer, with the same
+        // UTF-8 replacement policy as dump(), without allocating a giant dump.
+        nlohmann::detail::serializer<json> writer(nlohmann::detail::output_adapter<char>(stream), ' ', json::error_handler_t::replace);
+        writer.dump(j, false, false, 0);
+        return std::move(buffer.bytes);
+    } catch (OutputLimit const&) {
+        return std::nullopt;
+    }
+}
+
 std::string serialize(json const& j)
 {
-    // Replace invalid UTF-8 instead of throwing; responses must always serialize.
-    return j.dump(-1, ' ', false, json::error_handler_t::replace);
+    if (auto bytes = limited_serialize(j)) return std::move(*bytes);
+    return *limited_serialize(error_response(j.value("requestId", json(nullptr)), "RESPONSE_TOO_LARGE",
+        "The response exceeds 1 MiB; use paged data or refresh the native state"));
 }
 
 } // namespace
@@ -79,8 +120,10 @@ std::string EventChannel::wrap(json const& event)
     json payload = event;
     std::string type = payload.value("type", "event");
     payload.erase("type");
-    return serialize(json{{"protocolVersion", protocol_version}, {"event", std::move(type)},
-        {"sequence", std::to_string(seq)}, {"payload", std::move(payload)}});
+    if (auto bytes = limited_serialize(json{{"protocolVersion", protocol_version}, {"event", std::move(type)},
+        {"sequence", std::to_string(seq)}, {"payload", std::move(payload)}})) return std::move(*bytes);
+    return serialize(json{{"protocolVersion", protocol_version}, {"event", "resyncRequired"},
+        {"sequence", std::to_string(seq)}, {"payload", {{"reason", "EVENT_TOO_LARGE"}}}});
 }
 
 std::uint64_t EventChannel::last_sequence() const

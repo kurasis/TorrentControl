@@ -151,7 +151,7 @@ struct JobSnapshot {
     std::uint64_t version = 0;
 };
 
-nlohmann::json to_json(JobSnapshot const& s);
+nlohmann::json to_json(JobSnapshot const& s, bool bridge_preview = false);
 
 class JobScheduler {
 public:
@@ -186,6 +186,13 @@ public:
 
     std::vector<JobSnapshot> snapshot() const;
     std::optional<JobSnapshot> find(std::string const& id) const;
+    nlohmann::json bridge_page(std::size_t offset, std::size_t limit) const;
+    nlohmann::json verification_page(std::string const& id, std::size_t offset, std::size_t limit, bool errors_only) const;
+    nlohmann::json verification_file(std::string const& id, std::size_t index) const;
+    nlohmann::json layout_page(std::string const& id, std::size_t offset, std::size_t limit) const;
+    nlohmann::json layout_row(std::string const& id, std::size_t index) const;
+    nlohmann::json text_page(std::string const& id, std::string const& kind, std::size_t offset, std::size_t limit) const;
+    nlohmann::json text_detail(std::string const& id, std::string const& kind, std::size_t index, std::string const& version) const;
     bool has_active() const;
     void cancel_all();
     // Blocks until no job is queued or running (tests and shutdown).
@@ -210,6 +217,7 @@ private:
     std::map<std::string, std::unique_ptr<Job>> jobs_;
     std::vector<std::string> order_;
     std::uint64_t next_id_ = 1;
+    std::uint64_t collection_revision_ = 0;
     int running_ = 0;
     bool shutting_down_ = false;
 };

@@ -36,7 +36,7 @@
   };
   let scan = { state: "empty", sourcesRevision: "0" };
   const settings = Object.assign({ theme: "system", language: "en", mode: "simple", openClientWithoutAsking: false }, config.settings);
-  const jobs = [];
+  const jobs = config.jobs ?? [];
   let torrent = config.torrent ?? null;
   let editorPreview = config.editorPreview ?? null;
   const registry = [
@@ -88,7 +88,32 @@
     checkSelfTestProfile: (p) => ({ persisted: config.selfTestPersistence !== false
       && profiles.some((profile) => profile.id === p.profileId && profile.name === p.name) }),
     getEngineInfo: () => ({ appVersion: "0.0.0-test", engineVersion: "libtorrent 2.1.2", protocolVersion: 1 }),
-    getSnapshot: () => ({ draft: snapshotDraft(), scan, jobs, settings, profiles, torrent, editorPreview, diagnostics: diagnosticRun ? [diagnosticRun] : [] }),
+    getSnapshot: () => ({ draft: snapshotDraft(), scan, jobs: config.pagedJobs ? jobs.slice(0, 50) : jobs,
+      nextJobsOffset: config.pagedJobs && jobs.length > 50 ? 50 : null,
+      jobsTotal: jobs.length, jobsRevision: "1", settings, profiles, torrent, editorPreview, diagnostics: diagnosticRun ? [diagnosticRun] : [] }),
+    getJobsPage: (p) => ({ jobs: jobs.slice(p.offset, p.offset + p.limit), total: jobs.length, collectionRevision: "1",
+      nextOffset: p.offset + p.limit < jobs.length ? p.offset + p.limit : null }),
+    getVerifyFilesPage: (p) => {
+      const total = p.errorsOnly ? (config.verifyErrors ?? 0) : (config.verifyFiles ?? 0);
+      return { total, rows: Array.from({ length: Math.min(p.limit, Math.max(0, total - p.offset)) }, (_, i) => {
+        const index = i + p.offset;
+        return { index, path: `Payload/file-${index}.bin`, status: p.errorsOnly ? "missing" : "ok", message: "" };
+      }) };
+    },
+    getVerifyFile: (p) => ({ file: { path: config.verifyDetailPath ?? `Payload/file-${p.index}.bin`, status: "missing", message: "Full native detail", badV1Pieces: "0", badV2Pieces: "0" } }),
+    getJobLayoutPage: (p) => {
+      const layout = jobs.find((job) => job.id === p.jobId)?.result?.layout ?? [];
+      return { rows: layout.slice(p.offset, p.offset + p.limit), total: layout.length, realFiles: layout.length, complete: true };
+    },
+    getJobTextPage: (p) => {
+      const job = jobs.find((job) => job.id === p.jobId);
+      const lines = p.kind === "log" ? job?.log ?? [] : config.warningLines ?? job?.result?.warnings ?? [];
+      return { rows: lines.slice(p.offset, p.offset + p.limit).map((text, i) => ({ text, index: p.offset + i, displayTruncated: false })), total: lines.length, version: job?.version ?? "1" };
+    },
+    getJobText: (p) => {
+      const job = jobs.find((job) => job.id === p.jobId);
+      return { text: (p.kind === "log" ? job.log : config.warningLines ?? job.result.warnings)[p.index], version: job.version };
+    },
     startDiagnostics: (p) => {
       if (p.networkMode === "http-proxy" && !p.httpProxy) throw Object.assign(new Error("Specify the proxy origin"), { code: "INVALID_PROXY" });
       diagnosticRun = { id: `diagnostic-${++diagnosticCounter}`, sequence: String(diagnosticCounter), state: config.diagnosticBusy ? "running" : "completed", total: diagnosticRows.length, completed: config.diagnosticBusy ? 0 : diagnosticRows.length, network: p.networkMode };
@@ -104,9 +129,13 @@
       return { torrent };
     },
     getFieldRegistry: () => ({ fields: registry }),
-    getTorrentFields: (p) => ({ total: p.scope === "info" ? 2 : 1,
-      rows: registry.filter((f) => f.scope === p.scope && values[`${p.scope}:${f.key}`]).map((f) =>
-        ({ key: { t: "str", utf8: f.key }, value: values[`${p.scope}:${f.key}`], descriptor: f, editable: f.editable })) }),
+    getTorrentFields: (p) => {
+      const fields = config.fieldRows ?? registry.filter((f) => f.scope === p.scope && values[`${p.scope}:${f.key}`]).map((f) =>
+        ({ key: { t: "str", utf8: f.key }, value: values[`${p.scope}:${f.key}`], descriptor: f, editable: f.editable }));
+      const offset = p.offset ?? 0;
+      const end = offset + Math.min(p.limit ?? 50, config.fieldPageSize ?? 50);
+      return { total: fields.length, rows: fields.slice(offset, end), nextOffset: end < fields.length ? end : null };
+    },
     getTorrentField: (p) => {
       const f = registry.find((f) => f.scope === p.scope && f.key === p.key.utf8);
       return { key: p.key, value: values[`${p.scope}:${p.key.utf8}`] ?? null, descriptor: f ?? null,

@@ -3,6 +3,7 @@
 #include "tc/core/error.hpp"
 
 #include <string>
+#include <algorithm>
 
 namespace tc::bridge {
 
@@ -69,25 +70,18 @@ std::string from_hex(std::string const& hex)
     return out;
 }
 
-// Number of nodes in a subtree, for the elision marker.
-std::size_t count_nodes(Value const& v)
-{
-    std::size_t n = 1;
-    if (v.is_list())
-        for (auto const& item : v.items()) n += count_nodes(item);
-    if (v.is_dictionary())
-        for (auto const& e : v.entries()) n += count_nodes(e.value);
-    return n;
-}
-
 class Converter {
 public:
-    explicit Converter(DisplayBudget const& budget) : budget_(budget) {}
+    explicit Converter(DisplayBudget const& budget) : budget_(budget) {
+        if (budget.max_output_bytes < 128) bad("display byte budget must be at least 128");
+    }
 
     nlohmann::json string(std::string_view bytes)
     {
-        bool const truncated = bytes.size() > budget_.max_string_bytes;
-        std::string_view shown = truncated ? bytes.substr(0, budget_.max_string_bytes) : bytes;
+        auto const size = std::min({bytes.size(), budget_.max_string_bytes, remaining_bytes() / 6});
+        bool const truncated = size < bytes.size();
+        std::string_view shown = bytes.substr(0, size);
+        used_bytes_ += size * 6; // controls may serialize as six-byte escapes
         nlohmann::json j;
         // A UTF-8 sequence cut by truncation is shown as hex rather than mangled.
         if (valid_utf8(shown)) {
@@ -102,18 +96,27 @@ public:
 
     nlohmann::json value(Value const& v)
     {
-        if (used_ >= budget_.max_nodes) return {{"t", "elided"}, {"nodes", count_nodes(v)}};
+        if (!room()) {
+            // Do not walk an omitted subtree just to count its descendants.
+            if (!v.is_list() && !v.is_dictionary()) return {{"t", "elided"}, {"nodes", 1}};
+            return {{"t", "elided"}, {"children", v.is_list() ? v.items().size() : v.entries().size()}};
+        }
         ++used_;
+        used_bytes_ += node_overhead;
         switch (v.type()) {
         case core::bencode::Type::Integer:
-            if (v.text().size() > budget_.max_string_bytes)
-                return {{"t", "int"}, {"v", v.text().substr(0, budget_.max_string_bytes)}, {"truncated", true}};
+            if (v.text().size() > std::min(budget_.max_string_bytes, remaining_bytes() / 6)) {
+                auto const size = std::min(budget_.max_string_bytes, remaining_bytes() / 6);
+                used_bytes_ += size * 6;
+                return {{"t", "int"}, {"v", v.text().substr(0, size)}, {"truncated", true}};
+            }
+            used_bytes_ += v.text().size() * 6;
             return {{"t", "int"}, {"v", v.text()}};
         case core::bencode::Type::String: return string(v.text());
         case core::bencode::Type::List: {
             nlohmann::json items = nlohmann::json::array();
             for (auto const& item : v.items()) {
-                bool const last = used_ >= budget_.max_nodes;
+                bool const last = !room();
                 items.push_back(value(item));
                 if (last) break;
             }
@@ -122,11 +125,12 @@ public:
         case core::bencode::Type::Dictionary: {
             nlohmann::json entries = nlohmann::json::array();
             for (auto const& e : v.entries()) {
-                if (used_ >= budget_.max_nodes) {
+                if (!room()) {
                     entries.push_back({{"key", {{"t", "elided"}}}, {"value", {{"t", "elided"}}}});
                     break;
                 }
                 ++used_; // keys also consume the display budget
+                used_bytes_ += node_overhead;
                 entries.push_back({{"key", string(e.key)}, {"value", value(e.value)}});
             }
             return {{"t", "dict"}, {"entries", std::move(entries)}};
@@ -138,6 +142,14 @@ public:
 private:
     DisplayBudget const& budget_;
     std::size_t used_ = 0;
+    std::size_t used_bytes_ = 0;
+    static constexpr std::size_t node_overhead = 128;
+    std::size_t remaining_bytes() const { return used_bytes_ < budget_.max_output_bytes ? budget_.max_output_bytes - used_bytes_ : 0; }
+    bool room() const {
+        // Leave room for one elision marker in each open container; the
+        // reserved per-node overhead covers wrappers, lengths and markers.
+        return used_ < budget_.max_nodes && remaining_bytes() >= node_overhead;
+    }
 };
 
 std::string bytes_from_json(nlohmann::json const& j)

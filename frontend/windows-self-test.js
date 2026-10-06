@@ -124,6 +124,11 @@ export async function runNativeFlow(actions, state, info) {
     }
     const verify = await dialog("payload", "verifyPayload", { torrentId: opened.id });
     check((await job(state, verify.jobId)).verify.ok, `${format} payload mismatch`);
+    const report = await request("getVerifyFilesPage", { jobId: verify.jobId, offset: 0, limit: 250, errorsOnly: false });
+    check(report.total === 2 && report.rows.length === 2 && report.rows.every((file) => file.status === "ok"),
+      `${format} paged native verification lost files`);
+    const detail = await request("getVerifyFile", { jobId: verify.jobId, index: report.rows[1].index });
+    check(detail.file.path === report.rows[1].path && detail.file.status === "ok", "Native verification detail changed its file");
     created.push(finished);
   }
   await dialog("project", "saveProject");
@@ -213,7 +218,7 @@ export async function runNativeFlow(actions, state, info) {
   snapshot = await request("getSnapshot");
   Object.assign(evidence, { nativeDialogs: true, dialogCancel: true, unicodePaths: true,
     formats: ["v1", "v2", "hybrid"], verified: 3, missingPayloadRejected: true,
-    projectIdentical: true, magnetSaved: true, metadataEditor: true,
+    projectIdentical: true, magnetSaved: true, metadataEditor: true, verificationPaging: true,
     outerEditPreserved: true, infoEditChanged: true, editedOutputsVerified: 2 });
   // Store the checkpoint natively before crashing; a recovered page must get
   // its state from getSnapshot and must not repeat any earlier operation.
