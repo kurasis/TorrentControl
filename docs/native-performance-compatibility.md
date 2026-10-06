@@ -19,6 +19,10 @@ The existing browser virtualization test remains separate.
   Windows and Linux CI save JSON reports; timing is evidence, not a flaky
   hardware-independent pass/fail threshold. File counts, accepted preflight
   and responses below 1 MiB are asserted.
+- The Windows loopback fixture publishes its complete port file atomically,
+  then the launcher validates the port before starting WebView2. This avoids
+  treating an empty, partially written readiness file as port zero. Self-test
+  failure reports retain the native error message as well as its code.
 
 Local Linux release measurements on 2026-10-05 (p50, milliseconds):
 

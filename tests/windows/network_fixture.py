@@ -48,5 +48,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-args.port_file.write_text(str(server.server_port), encoding="ascii")
+# The PowerShell launcher treats the published path as the readiness signal.
+# Publish it only after the complete port value is written and closed.
+pending_port_file = args.port_file.with_suffix(".tmp")
+pending_port_file.write_text(str(server.server_port), encoding="ascii")
+pending_port_file.replace(args.port_file)
 server.serve_forever()

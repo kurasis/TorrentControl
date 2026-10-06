@@ -257,6 +257,7 @@ test.describe("native self-test recovery failure", () => {
   test("a page reload alone cannot pass the renderer crash check", async ({ page }) => {
     await page.goto("/index.html?selfTest=1&nativeFlow=1");
     await expect.poll(() => page.evaluate(() => window.__mock.requests.find((r) => r.operation === "reportSelfTest")?.payload))
-      .toMatchObject({ ok: false, error: expect.stringContaining("renderer failure callback") });
+      .toMatchObject({ ok: false, error: expect.stringContaining("renderer failure callback"),
+        message: expect.stringContaining("renderer failure callback") });
   });
 });
