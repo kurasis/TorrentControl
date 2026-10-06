@@ -91,7 +91,9 @@ records kernel wait channels, checks responsive cancel/snapshot replies, then
 restores the server. It requires a terminal state, an actual scheduler join,
 zero live readers, unchanged previous output and no temporary files. Every
 case performs a healthy retry with identical baseline torrent bytes; the
-original payload must remain unchanged. Normal cleanup must unmount the share
+existing CIFS mount must first recover after a server restart (bounded to
+90 seconds, with the observed recovery time recorded). The original payload
+must remain unchanged. Normal cleanup must unmount the share
 and remove the task-owned namespace, interfaces and server.
 
 The real GUI run also exposed retained renderer job history: snapshot refresh

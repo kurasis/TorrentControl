@@ -136,6 +136,20 @@ read only = yes
     def suspend(self):
         os.killpg(self.server.pid, signal.SIGSTOP)
 
+    def wait_client_recovery(self, timeout=90):
+        # Listening again does not mean an existing CIFS session has completed
+        # its kernel reconnect. Keep the same mount and wait for a real request
+        # to succeed before launching the healthy workflow retry.
+        started = time.monotonic()
+        while True:
+            try:
+                assert (self.mount / 'payload.bin').stat().st_size == 64 * 1024 * 1024
+                return (time.monotonic() - started) * 1000
+            except OSError as error:
+                if time.monotonic() - started >= timeout:
+                    raise TimeoutError(f'CIFS session did not recover: {error}') from error
+                time.sleep(0.1)
+
     def resume(self):
         if self.server and self.server.poll() is None:
             os.killpg(self.server.pid, signal.SIGCONT)
@@ -296,6 +310,7 @@ def main():
                                     except Exception:
                                         workflow.process.kill()
                                         workflow.process.wait(timeout=15)
+                        case['clientRecoveryMs'] = fixture.wait_client_recovery()
                         recovery = folder / 'recovery'
                         recovery.mkdir()
                         healthy(executable, config, recovery)
