@@ -5,9 +5,14 @@ const positions = new Map();
 // Native pages can stop before the requested row count because of their byte
 // budget. Follow the returned cursor, including for Previous after short pages.
 export function collectionPane(label, fetchPage, renderRow, { id = "model-page", onPage } = {}) {
-  let offset = positions.get(id) ?? 0, next = null, total = 0, serial = 0;
+  const saved = positions.get(id);
+  let offset = saved?.offset ?? 0, next = null, total = 0, serial = 0;
   let failedOffset = null;
-  const history = [];
+  const history = saved?.history ?? [];
+  function remember(value) {
+    positions.delete(id); positions.set(id, { offset: value, history });
+    if (positions.size > 32) positions.delete(positions.keys().next().value);
+  }
   const rows = h("div", { id: `${id}-rows` });
   const status = h("p", { id: `${id}-status`, role: "status" });
   const error = h("p", { class: "error", role: "alert" });
@@ -18,8 +23,13 @@ export function collectionPane(label, fetchPage, renderRow, { id = "model-page",
   const first = h("button", { type: "button", id: `${id}-first`, onclick: () => { history.length = 0; load(0); } }, t("firstPage"));
   const root = h("section", { id, class: "model-page", "aria-label": label }, status, rows, error,
     h("div", { class: "button-row" }, first, previous, following, last, retry));
+  for (const control of [first, previous, following, last, retry]) control.disabled = true;
   async function load(requested) {
+    if (!root.isConnected) return;
     const token = ++serial;
+    // Preserve intent even when a validation redraw replaces this pane before
+    // the native read replies. A new pane resumes this cursor and history.
+    remember(requested);
     for (const control of [first, previous, following, last, retry]) control.disabled = true;
     try {
       const page = await fetchPage(requested, 50);
@@ -28,8 +38,7 @@ export function collectionPane(label, fetchPage, renderRow, { id = "model-page",
       offset = page.offset ?? requested;
       next = page.nextOffset ?? null;
       total = page.total;
-      positions.delete(id); positions.set(id, offset);
-      if (positions.size > 32) positions.delete(positions.keys().next().value);
+      remember(offset);
       replace(rows, page.items.map((item, index) => renderRow(item, offset + index, page)));
       status.textContent = t("collectionPage", { first: total ? offset + 1 : 0, last: offset + page.items.length, total });
       error.textContent = "";

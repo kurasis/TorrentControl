@@ -25,6 +25,24 @@ test.describe("native row editing", () => {
   test("editing last tracker and seed retains the first unloaded row", async ({ page }) => {
     await page.goto("/index.html");
     await page.locator("#tab-trackers").click();
+    // Force a redraw while the Last read is in flight, as real validation can.
+    await page.evaluate(() => {
+      window.__mock.config.responseDelay = (message) => message.operation === "getModelPage"
+        && message.payload.key === "trackers" && message.payload.offset === 999 ? 200 : 0;
+      const original = window.__mock.ops.getModelPage;
+      let emitted = false;
+      window.__mock.ops.getModelPage = (payload) => {
+        if (!emitted && payload.key === "trackers" && payload.offset === 999) {
+          emitted = true;
+          window.__mock.emit("scan", { state: "scanning", sourcesRevision: "0" });
+        }
+        return original(payload);
+      };
+    });
+    await page.locator("#paged-trackers-last").click();
+    await expect(page.locator("#paged-trackers-999")).toBeVisible();
+    await page.locator("#paged-trackers-previous").click();
+    await expect(page.locator("#paged-trackers-0")).toBeVisible();
     await page.locator("#paged-trackers-last").click();
     await page.locator("#paged-trackers-999").fill("https://replacement.example/");
     await page.locator("#paged-trackers-999").press("Tab");

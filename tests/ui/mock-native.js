@@ -324,7 +324,7 @@
     requests.push({ operation: message.operation, payload: message.payload, attached: attached?.length ?? 0 });
     const reply = (body) => {
       const data = JSON.stringify({ protocolVersion: 1, requestId: message.requestId, ...body });
-      setTimeout(() => listeners.forEach((l) => l({ data })), 0);
+      setTimeout(() => listeners.forEach((l) => l({ data })), config.responseDelay?.(message) ?? 0);
     };
     const op = ops[message.operation];
     if (!op) return reply({ ok: false, error: { code: "UNKNOWN_OPERATION", message: message.operation, retryable: false } });

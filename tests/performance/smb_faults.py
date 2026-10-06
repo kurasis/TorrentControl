@@ -55,6 +55,8 @@ class SmbFixture:
         self.config = root / 'smb.conf'
         self.config.write_text(f'''[global]
 server role = standalone server
+netbios name = TC-SMB-FIXTURE
+workgroup = TC-FIXTURE
 security = user
 map to guest = Bad User
 guest account = nobody
@@ -102,8 +104,13 @@ read only = yes
         if self.server_log:
             self.server_log.close()
         self.server_log = (self.root / 'server-stdout.log').open('a', encoding='utf-8')
-        self.server = subprocess.Popen(['ip', 'netns', 'exec', self.namespace, 'smbd', '-F', '--no-process-group', '-s', str(self.config)],
-                                       stdout=self.server_log, stderr=subprocess.STDOUT, start_new_session=True)
+        # This daemon owns its sockets; it is not the systemd service that may
+        # have launched the CI runner. Do not inherit socket/notify activation.
+        environment = {key: value for key, value in os.environ.items()
+                       if key not in ('NOTIFY_SOCKET', 'LISTEN_FDS', 'LISTEN_PID', 'LISTEN_FDNAMES')}
+        self.server = subprocess.Popen(['ip', 'netns', 'exec', self.namespace, 'smbd', '-F', '--no-process-group',
+                                       '--debug-stdout', '-d', '3', '-s', str(self.config)],
+                                       stdout=self.server_log, stderr=subprocess.STDOUT, start_new_session=True, env=environment)
         deadline = time.monotonic() + 15
         while True:
             if self.server.poll() is not None:
@@ -111,7 +118,7 @@ read only = yes
                 samba_log = self.root / 'samba.log'
                 if samba_log.exists():
                     messages += '\n' + samba_log.read_text(errors='replace')
-                raise RuntimeError('Fixture Samba server exited during startup: ' + messages[-4000:])
+                raise RuntimeError(f'Fixture Samba server exited {self.server.returncode} during startup: ' + messages[-4000:])
             try:
                 with socket.create_connection((self.server_ip, 1445), timeout=0.2):
                     return
