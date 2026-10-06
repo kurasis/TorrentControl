@@ -176,6 +176,11 @@
     },
     getJobsPage: (p) => ({ jobs: jobs.slice(p.offset, p.offset + p.limit), total: jobs.length, collectionRevision: "1",
       nextOffset: p.offset + p.limit < jobs.length ? p.offset + p.limit : null }),
+    getJobSummary: (p) => {
+      const job = jobs.find((row) => row.id === p.jobId);
+      if (!job) throw Object.assign(new Error("No such job"), { code: "JOB_NOT_FOUND" });
+      return job;
+    },
     clearFinishedJobs: () => {
       for (let i = jobs.length - 1; i >= 0; --i)
         if (/^(Succeeded|SucceededWithWarnings|Failed|Cancelled)$/.test(jobs[i].state)) jobs.splice(i, 1);

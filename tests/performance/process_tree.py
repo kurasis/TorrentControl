@@ -94,6 +94,7 @@ class TreeMonitor:
             except psutil.AccessDenied:
                 self.errors.append(f'Cannot enumerate descendants of {identity[0]}')
         resident = root_resident = private = pss = 0
+        root_threads = root_handles = None
         count = 0
         pss_complete = os.name != 'nt'
         for identity, process in list(self.known.items()):
@@ -104,6 +105,8 @@ class TreeMonitor:
                 resident += info.rss
                 if identity == self.root:
                     root_resident = info.rss
+                    root_threads = process.num_threads()
+                    root_handles = process.num_handles() if os.name == 'nt' else process.num_fds()
                 private += getattr(info, 'private', 0)
                 count += 1
                 if os.name != 'nt':
@@ -120,6 +123,7 @@ class TreeMonitor:
             self.samples.append({'tMs': round((time.monotonic() - self.started) * 1000, 2),
                                  'phase': self.phase(), 'processes': count, 'residentSumBytes': resident,
                                  'rootResidentBytes': root_resident, 'childResidentSumBytes': resident - root_resident,
+                                 'rootThreads': root_threads, 'rootHandlesOrFds': root_handles,
                                  'privateCommitBytes': private if os.name == 'nt' else None,
                                  'pssBytes': pss if pss_complete else None})
 
@@ -147,6 +151,8 @@ class TreeMonitor:
                              'childResidentAtPeakBytes': peak['childResidentSumBytes'],
                              'processesAtPeak': peak['processes'], 'maxProcesses': max(s['processes'] for s in values),
                              'peakPssBytes': max((s['pssBytes'] for s in values if s['pssBytes'] is not None), default=None),
+                             'peakRootThreads': max((s['rootThreads'] for s in values if s['rootThreads'] is not None), default=None),
+                             'peakRootHandlesOrFds': max((s['rootHandlesOrFds'] for s in values if s['rootHandlesOrFds'] is not None), default=None),
                              'peakPrivateCommitBytes': max((s['privateCommitBytes'] for s in values if s['privateCommitBytes'] is not None), default=None)}
         return {'intervalMs': self.interval * 1000, 'processIdentities': len(self.known),
                 'discoveredProcesses': list(self.discovered.values()),

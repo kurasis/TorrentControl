@@ -13,6 +13,7 @@ export const state = {
   scan: { state: "empty" },
   validation: null,
   jobs: new Map(),
+  jobHistory: { ids: [], offset: 0, offsetIntent: null, total: 0, nextOffset: null, followNewest: true, previous: [], serial: 0 },
   settings: { mode: "simple", theme: "system", language: "" },
   profiles: [],
   profilesTotal: 0,
@@ -334,6 +335,7 @@ export const actions = {
     if (r?.jobId) {
       state.watchResult.add(r.jobId);
       toast(t("creating"));
+      await settleWatch(r.jobId);
     }
   },
   async planBatch(mode, policy, chooseFolder = false) {
@@ -360,10 +362,23 @@ export const actions = {
     if (await showConfirm(t("confirmCancelTitle"))) await guarded(request("cancelJob", { jobId }));
   },
   async clearFinished() {
-    await guarded(request("clearFinishedJobs"));
-    for (const [id, job] of state.jobs) if (isTerminal(job.state)) state.jobs.delete(id);
-    invalidate("jobs");
+    if (await guarded(request("clearFinishedJobs")) === null) return;
+    for (const [id, job] of state.jobs) if (isTerminal(job.state)) {
+      state.jobs.delete(id); state.watchResult.delete(id);
+    }
+    if (!state.jobs.has(state.selectedJob)) state.selectedJob = null;
+    state.jobHistory.previous.length = 0;
+    await actions.loadJobsPage();
+    checkBatchSoon();
   },
+  loadJobsPage: (offset) => guarded(loadJobsPage(offset)),
+  firstJobsPage() { state.jobHistory.previous.length = 0; return actions.loadJobsPage(0); },
+  previousJobsPage() { return actions.loadJobsPage(state.jobHistory.previous.pop() ?? Math.max(0, state.jobHistory.offset - 50)); },
+  nextJobsPage() {
+    if (state.jobHistory.nextOffset === null) return;
+    rememberJobsOffset(); return actions.loadJobsPage(state.jobHistory.nextOffset);
+  },
+  latestJobsPage() { rememberJobsOffset(); state.jobHistory.followNewest = true; return actions.loadJobsPage(); },
   selectJob(jobId) {
     state.selectedJob = jobId;
     invalidate("jobs", "workspace");
@@ -513,6 +528,7 @@ const checkBatchSoon = debounce(async () => {
     if (Array.isArray(batch)) continue;
     try {
       const status = await request("getBatchStatus", { batchId: id });
+      if (status.total === 0) { state.batchJobs.delete(id); continue; }
       if (status.finished && status.total === batch.total) {
         state.batchJobs.delete(id);
         toast(t("batchReport", { id, done: status.done, failed: status.failed, cancelled: status.cancelled }));
@@ -523,19 +539,99 @@ const checkBatchSoon = debounce(async () => {
 
 // ---- Events -----------------------------------------------------------------------
 
-function onJob(job) {
-  const known = state.jobs.get(job.id);
-  if (known && BigInt(known.version) >= BigInt(job.version)) return; // older update
-  state.jobs.set(job.id, job);
-  if (!state.selectedJob) state.selectedJob = job.id;
-  invalidate("jobs");
-  if (state.tab === "jobs") invalidate("workspace");
+let jobEventSerial = 0, readJobEventSerial = 0;
+function resolveWatch(job) {
   if (isTerminal(job.state) && state.watchResult.has(job.id)) {
     state.watchResult.delete(job.id);
     if (job.result) showResult(job, actions, state.settings);
   }
-  reportBatches();
 }
+
+async function settleWatch(id) {
+  if (!state.watchResult.has(id)) return;
+  try { resolveWatch(await request("getJobSummary", { jobId: id })); }
+  catch (error) { if (error.code === "JOB_NOT_FOUND") state.watchResult.delete(id); }
+}
+
+function onJob(job) {
+  resolveWatch(job);
+  const known = state.jobs.get(job.id);
+  if (known && BigInt(known.version) >= BigInt(job.version)) return; // older update
+  ++jobEventSerial;
+  const history = state.jobHistory;
+  if (known || history.followNewest || !state.selectedJob || state.selectedJob === job.id) state.jobs.set(job.id, job);
+  if (!known && history.followNewest && !history.ids.includes(job.id)) {
+    history.ids.push(job.id);
+    if (history.ids.length > 50) history.ids.shift();
+  }
+  if (!state.selectedJob) state.selectedJob = job.id;
+  trimJobs();
+  invalidate("jobs");
+  if (state.tab === "jobs") invalidate("workspace");
+  reportBatches();
+  if (!known) refreshJobsSoon();
+}
+
+function trimJobs() {
+  const keep = new Set(state.jobHistory.ids);
+  if (state.selectedJob) keep.add(state.selectedJob);
+  for (const id of state.jobs.keys()) if (!keep.has(id)) state.jobs.delete(id);
+}
+
+function rememberJobsOffset() {
+  state.jobHistory.previous.push(state.jobHistory.offset);
+  if (state.jobHistory.previous.length > 64) state.jobHistory.previous.shift();
+}
+
+function applyJobsPage(page, offset, beforeVersions) {
+  const history = state.jobHistory;
+  const newer = [...state.jobs.values()].filter((job) => beforeVersions.get(job.id) !== job.version);
+  const selected = state.jobs.get(state.selectedJob);
+  const oldJobs = new Map(state.jobs);
+  state.jobs.clear();
+  for (const job of page.jobs) {
+    const known = oldJobs.get(job.id);
+    state.jobs.set(job.id, known && BigInt(known.version) > BigInt(job.version) ? known : job);
+    resolveWatch(state.jobs.get(job.id));
+  }
+  if (page.total === 0) history.followNewest = true;
+  history.ids = page.jobs.map((job) => job.id);
+  for (const job of newer) {
+    const row = state.jobs.get(job.id);
+    if (row && BigInt(row.version) >= BigInt(job.version)) continue;
+    if (row || history.followNewest || job.id === state.selectedJob) {
+      state.jobs.set(job.id, job);
+      if (history.followNewest && !history.ids.includes(job.id)) history.ids.push(job.id);
+    }
+  }
+  history.ids = history.ids.slice(-50);
+  if (selected && !state.jobs.has(selected.id)) state.jobs.set(selected.id, selected);
+  history.offset = offset; history.total = page.total; history.nextOffset = page.nextOffset;
+  history.offsetIntent = null;
+  readJobEventSerial = jobEventSerial;
+  if (!state.selectedJob) state.selectedJob = history.ids[0] ?? null;
+  trimJobs();
+  invalidate("jobs", "workspace");
+}
+
+async function loadJobsPage(requested) {
+  const history = state.jobHistory;
+  const serial = ++history.serial;
+  if (requested !== undefined) { history.followNewest = false; history.offsetIntent = requested; }
+  for (let attempt = 0; attempt < 3; ++attempt) {
+    const beforeVersions = new Map([...state.jobs].map(([id, job]) => [id, job.version]));
+    const meta = await request("getJobsPage", { offset: 0, limit: 0 });
+    const offset = Math.min(requested ?? (history.followNewest ? Math.max(0, meta.total - 50) : history.offsetIntent ?? history.offset), Math.max(0, meta.total - 1));
+    const page = await request("getJobsPage", { offset, limit: 50 });
+    if (serial !== history.serial) return;
+    if (page.collectionRevision !== meta.collectionRevision) continue;
+    applyJobsPage(page, offset, beforeVersions);
+    return page;
+  }
+  throw new Error("Jobs changed while reading this page; try again");
+}
+
+const refreshJobsSoon = debounce(() => { if (jobEventSerial > readJobEventSerial) actions.loadJobsPage(); }, 150);
 
 function reportBatches() {
   for (const [first, ids] of state.batchJobs) {
@@ -594,19 +690,17 @@ function applySettings() {
 async function refresh() {
   let snap;
   let beforeVersions;
+  let page, offset;
+  const history = state.jobHistory;
+  const serial = ++history.serial;
   for (let attempt = 0; attempt < 3; ++attempt) {
     beforeVersions = new Map([...state.jobs].map(([id, job]) => [id, job.version]));
     snap = await request("getSnapshot");
-    let next = snap.nextJobsOffset;
-    let consistent = true;
-    while (next !== null && next !== undefined) {
-      const page = await request("getJobsPage", { offset: next, limit: 50 });
-      if (page.collectionRevision !== snap.jobsRevision) { consistent = false; break; }
-      if (page.nextOffset !== null && page.nextOffset <= next) throw new Error("Job pagination did not advance");
-      snap.jobs.push(...page.jobs);
-      next = page.nextOffset;
-    }
-    if (consistent) break;
+    const total = snap.jobsTotal ?? snap.jobs.length;
+    offset = Math.min(history.followNewest ? Math.max(0, total - 50) : history.offsetIntent ?? history.offset, Math.max(0, total - 1));
+    page = offset === 0 ? { jobs: snap.jobs.slice(0, 50), total, nextOffset: snap.nextJobsOffset ?? null, collectionRevision: snap.jobsRevision }
+      : await request("getJobsPage", { offset, limit: 50 });
+    if (page.collectionRevision === snap.jobsRevision) break;
     snap = null;
   }
   if (!snap) throw new Error("Jobs changed while refreshing; try again");
@@ -627,17 +721,26 @@ async function refresh() {
     state.tab = "expert";
     await loadMetadata(state, invalidate);
   } else state.editor = null;
-  const nativeIds = new Set(snap.jobs.map((job) => job.id));
-  for (const [id, job] of state.jobs) {
-    // A complete snapshot removes native-cleared rows. Preserve jobs whose
-    // events arrived after this read began, including newly queued jobs.
-    if (!nativeIds.has(id) && beforeVersions.has(id) && beforeVersions.get(id) === job.version) {
-      state.jobs.delete(id);
-      state.watchResult.delete(id);
+  if (serial === history.serial) {
+    // Only the selected off-page summary is pinned. Full reports stay native.
+    if (state.selectedJob && !page.jobs.some((job) => job.id === state.selectedJob)) {
+      const selectedId = state.selectedJob;
+      try {
+        const selected = await request("getJobSummary", { jobId: selectedId });
+        const known = state.jobs.get(selectedId);
+        if (state.selectedJob === selectedId && (!known || BigInt(known.version) < BigInt(selected.version))) state.jobs.set(selectedId, selected);
+      } catch (error) {
+        if (error.code !== "JOB_NOT_FOUND") throw error;
+        state.jobs.delete(selectedId); state.watchResult.delete(selectedId);
+        if (state.selectedJob === selectedId) state.selectedJob = null;
+      }
     }
+    if (serial === history.serial) applyJobsPage(page, offset, beforeVersions);
+    // A resync can cover a lost terminal event for a watched off-page job.
+    // Read only these IDs; never rebuild the complete job cache.
+    for (const id of state.watchResult) await settleWatch(id);
+    reportBatches();
   }
-  if (!state.jobs.has(state.selectedJob)) state.selectedJob = null;
-  for (const job of snap.jobs) onJob(job);
   state.pendingFields.clear();
   applySettings();
   validateSoon();
@@ -688,6 +791,11 @@ async function start() {
     const info = await request("getEngineInfo");
     await refresh();
     if (selfTest) {
+      if (new URLSearchParams(location.search).get("sessionFlow") === "1") {
+        const { runSessionFlow } = await import("./session-self-test.js");
+        await request("reportSelfTest", { ok: true, ...await runSessionFlow(actions, state) });
+        return;
+      }
       if (new URLSearchParams(location.search).get("smbFlow") === "1") {
         const { runSmbFlow } = await import("./smb-self-test.js");
         await runSmbFlow(actions, state);

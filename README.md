@@ -77,5 +77,6 @@ prints `{"status": "failed", "code": ...}` and exits with 2.
 - [Settings persistence and Runtime compatibility](docs/settings-runtime-reliability.md)
 - [Native model pagination](docs/model-pagination.md)
 - [Process-tree memory and real SMB fault evidence](docs/process-memory-smb.md)
+- [Long sessions with 3000 real jobs and paged history](docs/long-session-memory.md)
 - [Windows SMB cancellation and actual GUI shutdown](docs/windows-smb-faults.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)

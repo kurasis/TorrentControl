@@ -96,6 +96,8 @@ public:
 
     // ---- Jobs -----------------------------------------------------------------
     JobScheduler& jobs() { return *jobs_; }
+    void clear_finished_jobs();
+    nlohmann::json retention_summary() const;
     bool has_active_jobs() const { return jobs_->has_active(); }
 
     // ---- Existing torrents -----------------------------------------------------

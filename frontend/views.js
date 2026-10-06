@@ -684,12 +684,20 @@ export function renderReview(container, state, actions) {
 // ---- Jobs panel -------------------------------------------------------------------------
 
 export function renderJobs(container, state, actions) {
-  const jobs = [...state.jobs.values()];
+  const history = state.jobHistory;
+  const jobs = history.ids.map((id) => state.jobs.get(id)).filter(Boolean);
   const anyFinished = jobs.some((j) => !ACTIVE.has(j.state));
   replace(container,
     h("div", { class: "panel-head" },
       h("h2", { id: "jobs-heading" }, t("jobsHeading")),
-      anyFinished ? h("button", { type: "button", id: "clear-finished", onclick: () => actions.clearFinished() }, t("clearFinished")) : null),
+      anyFinished || history.total > 0 ? h("button", { type: "button", id: "clear-finished", onclick: () => actions.clearFinished() }, t("clearFinished")) : null),
+    h("p", { id: "jobs-page-status", role: "status" }, t("collectionPage", { first: jobs.length ? history.offset + 1 : 0, last: history.offset + jobs.length, total: Math.max(history.total, jobs.length) })),
+    h("div", { class: "button-row" },
+      h("button", { type: "button", id: "jobs-first", disabled: history.offset === 0, onclick: () => actions.firstJobsPage() }, t("firstPage")),
+      h("button", { type: "button", id: "jobs-previous", disabled: history.offset === 0, onclick: () => actions.previousJobsPage() }, t("previous")),
+      h("button", { type: "button", id: "jobs-next", disabled: history.nextOffset === null, onclick: () => actions.nextJobsPage() }, t("next")),
+      h("button", { type: "button", id: "jobs-latest", disabled: history.followNewest, onclick: () => actions.latestJobsPage() }, t("latestJobs")),
+      h("button", { type: "button", id: "jobs-retry", onclick: () => actions.loadJobsPage() }, t("retry"))),
     jobs.length === 0
       ? h("p", { class: "empty" }, t("noJobs"))
       : h("ul", { class: "jobs", id: "job-list" }, jobs.map((job) => renderJob(job, state, actions))));

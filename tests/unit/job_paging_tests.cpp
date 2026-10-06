@@ -28,6 +28,13 @@ TEST_CASE("verification pages retain every real file and index errors separately
     CHECK_THROWS_AS(app.jobs().text_detail(created, "log", 0, "0"), tc::service::ServiceError);
     CHECK_THROWS_AS(app.jobs().text_page(created, "unknown", 0, 50), tc::service::ServiceError);
     auto verified = app.verify_torrent(opened["id"], root); app.jobs().wait_idle();
+    auto retained = app.retention_summary();
+    CHECK(retained["createSpecs"] == 0);
+    CHECK(retained["verifySpecs"] == 0);
+    CHECK(retained["inputManifestEntries"] == 0);
+    CHECK(retained["verifyInputBytes"] == 0);
+    CHECK(retained["workers"] == 1);
+    CHECK(app.jobs().bridge_job(verified)["verify"]["filesTotal"] == 261);
     auto first = app.jobs().verification_page(verified, 0, 250, false);
     auto last = app.jobs().verification_page(verified, 250, 250, false);
     CHECK(first["total"] == 261);

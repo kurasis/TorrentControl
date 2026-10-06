@@ -220,6 +220,9 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
     d.register_operation("getJobsPage", [&app](json const& p) {
         return app.jobs().bridge_page(count(p, "offset", 0, 100'000'000), count(p, "limit", 50, 50));
     });
+    d.register_operation("getJobSummary", [&app](json const& p) {
+        return app.jobs().bridge_job(str(p, "jobId", 64));
+    });
     d.register_operation("getJobTextPage", [&app](json const& p) {
         return app.jobs().text_page(str(p, "jobId", 64), str(p, "kind", 16), count(p, "offset", 0, 100'000'000), count(p, "limit", 20, 50));
     });
@@ -252,7 +255,7 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
         return json::object();
     });
     d.register_operation("clearFinishedJobs", [&app](json const&) {
-        app.jobs().clear_finished();
+        app.clear_finished_jobs();
         return json::object();
     });
 

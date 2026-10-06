@@ -32,7 +32,8 @@ inter-sample peaks. Paired GUI-minus-headless observations are differences
 between separate runs, not an additive component-memory bound. There is no
 hardware-independent RSS threshold or claim that the whole process uses no
 more than the payload-buffer budget. This exercises one completed job per
-fresh process; a long session with thousands of jobs remains separate work.
+fresh process. [Long-session checks](long-session-memory.md) now cover three
+1000-job cycles in one process with paged renderer history and input release.
 
 The first full local run found a real 100,000-file hybrid creation failure:
 libtorrent's default 3,000,000 decode tokens rejected output already accepted

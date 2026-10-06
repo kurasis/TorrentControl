@@ -739,13 +739,37 @@ std::vector<std::string> AppService::start_batch(std::string const& revision)
     for (auto& s : specs) ids.push_back(jobs_->enqueue_create(std::move(s)));
     {
         std::lock_guard lock(mutex_);
-        batch_job_ids_[batch_id] = ids;
-        last_started_batch_ = batch_id;
+        auto retained = ids;
+        std::erase_if(retained, [&](auto const& id) { return !jobs_->contains(id); });
+        if (!retained.empty()) {
+            batch_job_ids_[batch_id] = std::move(retained);
+            last_started_batch_ = batch_id;
+        }
     }
     return ids;
 }
 
 // ---- Existing torrents -------------------------------------------------------
+
+void AppService::clear_finished_jobs()
+{
+    jobs_->clear_finished();
+    std::lock_guard lock(mutex_);
+    for (auto& [batch, jobs] : batch_job_ids_) std::erase_if(jobs, [&](auto const& id) { return !jobs_->contains(id); });
+    std::erase_if(batch_job_ids_, [](auto const& item) { return item.second.empty(); });
+    if (!batch_job_ids_.contains(last_started_batch_)) last_started_batch_.clear();
+}
+
+json AppService::retention_summary() const
+{
+    std::lock_guard lock(mutex_);
+    auto result = jobs_->retention_summary();
+    std::size_t ids = 0;
+    for (auto const& [batch, jobs] : batch_job_ids_) ids += jobs.size();
+    result["appBatches"] = batch_job_ids_.size();
+    result["appBatchJobIds"] = ids;
+    return result;
+}
 
 json AppService::open_torrent(fs::path const& path)
 {

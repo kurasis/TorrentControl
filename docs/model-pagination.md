@@ -45,8 +45,9 @@ earlier exclusions survive changes on other pages. Starting a batch returns
 its ID, total and only the first job-ID page. The UI obtains aggregate completion
 counts with `getBatchStatus`, including when jobs finished before the start
 response arrived, without collecting every batch job ID in the renderer.
-Counters are maintained at enqueue/terminal transitions and survive clearing
-completed job rows; polling does not scan or copy the entire history.
+Counters are maintained at enqueue/terminal transitions. The latest 64
+cleared aggregate reports survive Clear for pending completion notifications;
+older cleared aggregates expire. Polling does not scan or copy entire history.
 
 Project read/write limits are both **64 MiB**. The former 16 MiB read limit
 could reject the application's own saved large source mappings. Oversized
@@ -72,7 +73,7 @@ including a snapshot read failure after a successful profile save.
 This bounds the new transport and view paths, not the entire process tree.
 The native model still retains complete source mappings, profiles, imported
 overview data and reports; profile/review calculations can still build full
-native intermediate data. Existing frontend job history and process-tree
-memory measurements remain separate performance work. Real SMB fault tests,
+native intermediate data. Job history is now a bounded page with one selected
+summary, covered by [long-session checks](long-session-memory.md). Real SMB fault tests,
 stock independent client import, expanded fuzzing and clean-machine release
 acceptance remain open. Fuzz campaigns keep the user's three-run smoke limit.
