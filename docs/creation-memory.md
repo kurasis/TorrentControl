@@ -47,6 +47,6 @@ python3 tests/performance/creation_memory.py \
   --report build/performance/linux-creation-memory.json
 ```
 
-The following package addresses stop propagation to payload readers and safe
-cancellation of pending Windows reads. This memory package does not make a
-blocked network/filesystem operation cancellable.
+The [payload I/O package](cancellable-payload-io.md) adds stop propagation
+and safe cancellation of supported pending Windows reads. Delayed source
+opens and uncooperative storage/remote SMB operations remain open gates.

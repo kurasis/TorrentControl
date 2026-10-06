@@ -90,6 +90,9 @@ jobs:
       - name: Test (unit + headless integration proof)
         run: ctest --preset windows-x64-release
 
+      - name: Local payload cancellation and output preservation
+        run: python tests/performance/payload_cancellation.py --proof build/windows-x64-release/tools/tc-proof/tc-proof.exe --report build/performance/windows-payload-cancellation.json
+
       - name: Creation memory and payload IO (real files)
         run: python tests/performance/creation_memory.py --proof build/windows-x64-release/tools/tc-proof/tc-proof.exe --report build/performance/windows-creation-memory.json
 
@@ -181,6 +184,9 @@ jobs:
 
       - name: Test (unit + headless integration proof)
         run: ctest --preset linux-release
+
+      - name: Local payload cancellation and output preservation
+        run: python3 tests/performance/payload_cancellation.py --proof build/linux-release/tools/tc-proof/tc-proof --report build/performance/linux-payload-cancellation.json
 
       - name: Creation memory and payload IO (real files)
         run: python3 tests/performance/creation_memory.py --proof build/linux-release/tools/tc-proof/tc-proof --report build/performance/linux-creation-memory.json

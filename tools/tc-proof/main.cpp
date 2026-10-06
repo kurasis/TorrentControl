@@ -74,10 +74,11 @@ struct PayloadIo {
 class MeasuredReader final : public PayloadReader {
 public:
     MeasuredReader(std::unique_ptr<PayloadReader> inner, PayloadIo& io) : inner_(std::move(inner)), io_(io) {}
-    std::size_t read(std::span<std::byte> buffer) override {
+    std::size_t read(std::span<std::byte> buffer) override { return read(buffer, {}); }
+    std::size_t read(std::span<std::byte> buffer, std::stop_token stop) override {
         ++io_.reads;
         io_.max_request = std::max(io_.max_request, buffer.size());
-        auto const n = inner_->read(buffer);
+        auto const n = inner_->read(buffer, stop);
         io_.bytes += n;
         return n;
     }
@@ -89,9 +90,10 @@ private:
 class MeasuredSource final : public PayloadSource {
 public:
     MeasuredSource(PayloadSource& inner, PayloadIo& io) : inner_(inner), io_(io) {}
-    std::unique_ptr<PayloadReader> open(ManifestEntry const& entry) override {
+    std::unique_ptr<PayloadReader> open(ManifestEntry const& entry) override { return open(entry, {}); }
+    std::unique_ptr<PayloadReader> open(ManifestEntry const& entry, std::stop_token stop) override {
         ++io_.opens;
-        return std::make_unique<MeasuredReader>(inner_.open(entry), io_);
+        return std::make_unique<MeasuredReader>(inner_.open(entry, stop), io_);
     }
 private:
     PayloadSource& inner_;
@@ -260,10 +262,14 @@ int cmd_create(Args& a)
     MeasuredSource measured(*payload, io);
     std::uint64_t progress_events = 0;
     CreateProgress last;
+    std::optional<std::chrono::steady_clock::time_point> cancellation_requested;
     auto on_progress = [&](CreateProgress const& p) {
         ++progress_events;
         last = p;
-        if (cancel_after != 0 && p.payload_bytes_read >= cancel_after) stop.request_stop();
+        if (cancel_after != 0 && p.payload_bytes_read >= cancel_after && !cancellation_requested) {
+            cancellation_requested = std::chrono::steady_clock::now();
+            stop.request_stop();
+        }
     };
 
     json j;
@@ -302,6 +308,8 @@ int cmd_create(Args& a)
     } catch (CoreError const& e) {
         if (e.code() != ErrorCode::Cancelled) throw;
         j["status"] = "cancelled";
+        if (cancellation_requested)
+            j["cancelLatencyMs"] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - *cancellation_requested).count();
     }
     j["engine"] = engine_version();
     j["io"] = {{"bytesRead", io.bytes}, {"opens", io.opens}, {"readCalls", io.reads}, {"maxReadRequestBytes", io.max_request}};

@@ -213,3 +213,8 @@ indices, пагинация verification и metadata, предел исходя�
 Пакет [памяти при создании](creation-memory.md) ограничивает payload-буферы,
 освобождает промежуточные хеши до сериализации и сохраняет измерения реальных
 create/verify fixtures. Следом — отменяемое чтение Windows и медленный I/O.
+
+Пакет [отменяемого payload I/O](cancellable-payload-io.md) передаёт stop до
+reader, отменяет ожидающие Windows reads через CancelIoEx и проверяет безопасное
+завершение/сохранность предыдущего output. Реальные remote SMB faults и
+независимое подтверждение v2 остаются release gates.
