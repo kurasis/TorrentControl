@@ -109,7 +109,10 @@ can still be refused instead of automatically paginated.
    tighter native metadata estimates remain open. The [payload I/O package](cancellable-payload-io.md)
    cancels supported pending Windows reads safely; real remote SMB faults,
    delayed opens and driver stalls remain separate release gates.
-3. Resolve the second client's pure-v2 API and single-file hybrid path issues,
+3. The [BiglyBT hash audit](independent-v2-hash-audit.md) independently checks
+   v1 payload pieces, v2 roots and layers, including separate hybrid failure
+   controls. Full stock download-manager import is still open. Resolve the
+   second client's pure-v2 API and single-file hybrid path issues,
    cross-check with a mature independent v2 client such as BiglyBT and verify
    both hybrid hash families independently. Preserve every existing raw-info
    and canonical-layout guarantee while investigating.

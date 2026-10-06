@@ -63,19 +63,23 @@ with tempfile.TemporaryDirectory(prefix="tc-client-compat-") as temporary:
             checked = run([client, torrent, parent])
             assert checked["verified"] and checked["bytesMissing"] == 0
             for suffix in ["v1", "v2"]:
-                if f"infohash_{suffix}" in created:
-                    assert checked[f"infohash{suffix.upper()}"] == created[f"infohash_{suffix}"]
+                if f"infohash_{suffix}" in created["result"]:
+                    assert checked[f"infohash{suffix.upper()}"] == created["result"][f"infohash_{suffix}"]
             assert digest(parent) == before, "Independent client changed the payload or created files"
             # A negative control must fail even though imported metadata still parses.
             target = source / "данные #1/file-8.bin" if shape == "multifile" else source
             original = target.read_bytes()
             target.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+            corrupted_inventory = digest(parent)
             corrupt = run([client, torrent, parent], code=5)
             assert not corrupt["verified"] and corrupt["bytesMissing"] > 0
+            assert digest(parent) == corrupted_inventory
             target.write_bytes(original)
             target.unlink()
+            missing_inventory = digest(parent)
             missing = run([client, torrent, parent], code=5)
             assert not missing["verified"]
+            assert digest(parent) == missing_inventory
             target.write_bytes(original)
             reports.append({"shape": shape, "format": format, "client": checked,
                             "corruptionRejected": True, "missingRejected": True, "payloadUnchanged": True})

@@ -209,6 +209,17 @@ jobs:
       - name: Independent client audit (open gates reported)
         run: python3 tests/integration/client_compatibility.py --proof build/linux-release/tools/tc-proof/tc-proof --client build/anacrolix-proof --report build/performance/client-compatibility.json
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Fetch checksum-pinned BiglyBT developer dependency
+        run: python3 tools/biglybt-proof/fetch.py build/biglybt/BiglyBT.jar
+
+      - name: Independent v1 and v2 hash audit (BiglyBT)
+        run: python3 tests/integration/biglybt_compatibility.py --proof build/linux-release/tools/tc-proof/tc-proof --jar build/biglybt/BiglyBT.jar --report build/performance/biglybt-hash-audit.json
+
       - name: Upload performance and client evidence
         if: always()
         uses: actions/upload-artifact@v4
