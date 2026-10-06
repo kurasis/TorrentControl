@@ -96,3 +96,44 @@ test.describe("bounded long-session history", () => {
     await expect(page.locator("#job-list")).toContainText("History-1");
   });
 });
+
+test.describe("long-session developer driver contract", () => {
+  test.use({ mockConfig: `window.__mockConfig = { jobs: [], pagedJobs: true, verifyFiles: 32, verifyErrors: 0 };` });
+  test("runs all cycles through the production controller's page adapters", async ({ page }) => {
+    test.setTimeout(45000);
+    await page.goto("/index.html");
+    await expect(page.locator("#jobs-heading")).toBeVisible();
+    const result = await page.evaluate(async () => {
+      const { actions, state } = await import("/app.js");
+      const { runSessionFlow } = await import("/session-self-test.js");
+      const { ops, config, emit } = window.__mock;
+      const jobs = config.jobs;
+      let format = "v1", id = 0, ticks = 0;
+      const layout = Array.from({ length: 32 }, (_, index) => ({ index, torrentPath: `Collection/file-${index}.bin`, local: `file-${index}.bin` }));
+      const stats = () => ({ jobs: jobs.length, succeeded: jobs.length,
+        created: jobs.filter((job) => job.kind === "create").length,
+        verified: jobs.filter((job) => job.kind === "verify").length,
+        createSpecs: 0, verifySpecs: 0, inputManifestEntries: 0, verifyInputBytes: 0, jobThreads: 0,
+        workers: 1, batches: 0, appBatches: 0, appBatchJobIds: 0, archivedBatches: 64, running: 0, failed: 0, cancelled: 0 });
+      ops.sessionPrepare = (p) => { format = p.format; return { files: 32, format }; };
+      ops.sessionEnqueue = (p) => {
+        for (let i = 0; i < p.count; ++i) {
+          const job = { id: `session-${++id}`, name: `Session-${id}`, kind: p.kind === "verify" ? "verify" : "create",
+            state: "Succeeded", version: "1", bytesDone: "32", bytesTotal: "32", filesDone: 32, filesTotal: 32, log: ["Completed"] };
+          if (job.kind === "verify") job.verify = { ok: true, files: [], filesTotal: 32 };
+          else job.result = { output: "session.torrent", format, layout: layout.slice(0, 5), layoutTotal: 32, layoutTruncated: true, warnings: [] };
+          jobs.push(job); emit("job", { job });
+        }
+        return { enqueued: p.count, kind: p.kind };
+      };
+      ops.sessionJoin = () => ({ joined: true });
+      ops.sessionFinish = () => ({ ...stats(), format });
+      ops.sessionCheckpoint = (p) => ({ ...stats(), ...p, nativeTicks: ticks += 10, nativeMaxGapMs: 100 });
+      ops.getJobLayoutPage = (p) => ({ rows: layout.slice(p.offset, p.offset + p.limit), total: 32, realFiles: 32, complete: true });
+      const evidence = await runSessionFlow(actions, state);
+      return { jobs: evidence.jobs, formats: evidence.cycles.map((cycle) => cycle.format),
+        cleared: evidence.historyCleared, cached: state.jobs.size, native: jobs.length };
+    });
+    expect(result).toEqual({ jobs: 3000, formats: ["v1", "v2", "hybrid"], cleared: true, cached: 0, native: 0 });
+  });
+});

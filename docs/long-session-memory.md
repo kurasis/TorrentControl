@@ -96,7 +96,7 @@ The checked-in [local Linux report](evidence/long-session/linux-local.json)
 documents this fixture; Windows evidence comes from CI, not Linux emulation.
 The [pre-fix diagnostics](evidence/long-session/linux-before.json) cover one
 1000-job v1 cycle, without a pre-fix GUI or OS-memory claim. Local validation
-passed 170 CTest cases, 52 Chromium UI cases, both sampler controls and both
+passed 170 CTest cases, 53 Chromium UI cases, both sampler controls and both
 workflow fault controls.
 The final local cleared-phase peaks were 118,603,776 / 127,549,440 / 127,582,208
 resident bytes; root file-descriptor peaks were 3 / 3 / 3. These are observations
@@ -106,3 +106,6 @@ Regressions cover reentrant terminal clearing, concurrent Clear/enqueue,
 queued cancellation with other work running, bounded batch archives, retained
 verification details, 3000-row UI recovery and 3000 additional events. Fuzz
 campaigns keep the user's **three runs per campaign**.
+The mocked browser suite also runs the developer driver through the real
+controller adapters to catch response-shape mistakes; engine and actual
+Windows/WebView2 claims come from the separate native CI sessions.

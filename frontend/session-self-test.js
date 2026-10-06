@@ -43,7 +43,7 @@ export async function runSessionFlow(actions, state) {
       check(state.jobHistory.offset === 450 && state.jobs.has(pinned), "Off-page selection was lost");
       const verifiedId = state.jobHistory.ids[0];
       const verifiedFiles = await actions.verifyFilesPage(verifiedId, 0, 50, false);
-      check(verifiedFiles?.total === 32 && verifiedFiles.rows.length === 32, "Native verification detail page missing");
+      check(verifiedFiles?.total === 32 && verifiedFiles.items.length === 32, "Native verification detail page missing");
       const layout = await actions.jobLayoutPage(pinned, 0, 50);
       check(layout?.total >= 32, "Native creation layout page missing");
       const nextOffset = state.jobHistory.nextOffset;
