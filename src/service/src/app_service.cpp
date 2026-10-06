@@ -22,6 +22,12 @@ struct AppService::ScanResult {
     std::string state = "empty";
     std::optional<core::Manifest> manifest;
     std::optional<JobError> error;
+    // Cache data derived from the frozen manifest/draft, never filesystem checks.
+    json summary_cache = nullptr;
+    json engine_issues_cache = nullptr;
+    std::optional<std::vector<core::ManifestIssue>> manifest_issues_cache;
+    std::string filter_cache_key;
+    std::vector<std::size_t> filter_cache_indices;
 };
 
 namespace {
@@ -102,6 +108,11 @@ void AppService::check_revision(std::optional<std::uint64_t> revision) const
 void AppService::bump_locked(bool sources_changed)
 {
     ++draft_.revision;
+    scan_->summary_cache = nullptr;
+    scan_->engine_issues_cache = nullptr;
+    scan_->manifest_issues_cache.reset();
+    scan_->filter_cache_key.clear();
+    scan_->filter_cache_indices.clear();
     if (sources_changed) {
         ++sources_revision_;
         start_scan_locked();
@@ -370,6 +381,7 @@ json AppService::summary_locked() const
 {
     json s = json::object();
     if (!scan_->manifest) return s;
+    if (!scan_->summary_cache.is_null()) return scan_->summary_cache;
     core::Manifest const& m = *scan_->manifest;
     s["name"] = m.name;
     s["mode"] = m.mode == core::LayoutMode::SingleFile ? "single-file" : "directory";
@@ -382,8 +394,11 @@ json AppService::summary_locked() const
     s["filesRequiringHydration"] = hydration;
     if (m.entries.empty()) return s;
     try {
-        core::PieceSizeDecision const d = draft_.piece_length == 0 ? core::choose_piece_size(m, draft_.format)
-                                                                   : core::evaluate_piece_size(m, draft_.format, draft_.piece_length);
+        core::CreateOptions o = create_options(draft_, options_.now());
+        o.accept_large_resource_use = true; // estimates only; acceptance is checked in validate
+        o.allow_hydration = true;
+        core::PreflightReport const r = core::preflight(m, o);
+        core::PieceSizeDecision const& d = r.piece;
         std::size_t pad_files = 0;
         if (draft_.format == core::TorrentFormat::Hybrid)
             for (auto const& e : m.entries)
@@ -396,15 +411,12 @@ json AppService::summary_locked() const
         s["logicalBytes"] = std::to_string(m.total_length() + d.padding_bytes);
         s["estimatedHashBytes"] = std::to_string(d.estimated_hash_bytes);
         s["paddingWarning"] = d.padding_warning;
-        core::CreateOptions o = create_options(draft_, options_.now());
-        o.accept_large_resource_use = true; // estimates only; acceptance is checked in validate
-        o.allow_hydration = true;
-        core::PreflightReport const r = core::preflight(m, o);
         s["estimatedMetainfoBytes"] = std::to_string(r.estimate.metainfo_bytes);
         s["estimatedMemoryBytes"] = std::to_string(r.estimate.memory_bytes);
     } catch (CoreError const& e) {
         s["layoutError"] = {{"code", std::string(core::to_string(e.code()))}, {"message", e.what()}};
     }
+    scan_->summary_cache = s;
     return s;
 }
 
@@ -461,20 +473,26 @@ json AppService::validate_draft_locked() const
         for (auto const& u : m->unreadable)
             issues.push_back(issue("SOURCE_UNREADABLE", "error",
                 core::to_utf8(u.path) + ": " + u.message + " Exclude it or fix access to continue."));
-        for (auto const& i : core::validate_manifest(*m))
+        if (!scan_->manifest_issues_cache) scan_->manifest_issues_cache = core::validate_manifest(*m);
+        for (auto const& i : *scan_->manifest_issues_cache)
             issues.push_back(issue(std::string(core::to_string(i.code)), i.severity == core::Severity::Error ? "error" : "warning",
                 i.message, i.source_id));
         if (!m->entries.empty()) {
-            core::CreateOptions const o = create_options(draft_, options_.now());
-            try {
-                core::PreflightReport const r = core::preflight(*m, o);
-                for (auto const& w : r.warnings)
-                    issues.push_back(issue(std::string(core::to_string(w.code)), "warning", w.message, w.source_id));
-            } catch (CoreError const& e) {
-                // Manifest errors are already listed above.
-                if (e.code() != ErrorCode::PathCollision && e.code() != ErrorCode::InvalidPath && e.code() != ErrorCode::EmptyPayload)
-                    issues.push_back(issue(std::string(core::to_string(e.code())), "error", e.what(), e.source_id()));
+            if (scan_->engine_issues_cache.is_null()) {
+                json engine_issues = json::array();
+                core::CreateOptions const o = create_options(draft_, options_.now());
+                try {
+                    core::PreflightReport const r = core::preflight(*m, o);
+                    for (auto const& w : r.warnings)
+                        engine_issues.push_back(issue(std::string(core::to_string(w.code)), "warning", w.message, w.source_id));
+                } catch (CoreError const& e) {
+                    // Manifest errors are already listed above.
+                    if (e.code() != ErrorCode::PathCollision && e.code() != ErrorCode::InvalidPath && e.code() != ErrorCode::EmptyPayload)
+                        engine_issues.push_back(issue(std::string(core::to_string(e.code())), "error", e.what(), e.source_id()));
+                }
+                scan_->engine_issues_cache = std::move(engine_issues);
             }
+            for (auto const& entry : scan_->engine_issues_cache) issues.push_back(entry);
         }
     }
 
@@ -552,10 +570,21 @@ json AppService::manifest_page(std::size_t offset, std::size_t limit, std::strin
     if (scan_->manifest) {
         core::Manifest const& m = *scan_->manifest;
         std::string const needle = core::fold_case(filter);
-        for (auto const& e : m.entries) {
-            if (!needle.empty() && core::fold_case(m.torrent_path_string(e)).find(needle) == std::string::npos) continue;
-            if (total >= offset && entries.size() < limit) entries.push_back(entry_json(m, e));
-            ++total;
+        if (needle.empty()) {
+            total = m.entries.size();
+            for (std::size_t i = offset; i < total && entries.size() < limit; ++i)
+                entries.push_back(entry_json(m,m.entries[i]));
+        } else {
+            if (scan_->filter_cache_key != needle) {
+                scan_->filter_cache_indices.clear();
+                for (std::size_t i = 0; i < m.entries.size(); ++i)
+                    if (core::fold_case(m.torrent_path_string(m.entries[i])).find(needle) != std::string::npos)
+                        scan_->filter_cache_indices.push_back(i);
+                scan_->filter_cache_key = needle;
+            }
+            total = scan_->filter_cache_indices.size();
+            for (std::size_t i = offset; i < total && entries.size() < limit; ++i)
+                entries.push_back(entry_json(m,m.entries[scan_->filter_cache_indices[i]]));
         }
     }
     return json{{"offset", offset}, {"total", total}, {"entries", std::move(entries)},

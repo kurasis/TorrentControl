@@ -90,6 +90,17 @@ jobs:
       - name: Test (unit + headless integration proof)
         run: ctest --preset windows-x64-release
 
+      - name: Native bridge benchmark (100000 real files)
+        run: python tests/performance/native_bridge.py --proof build/windows-x64-release/tools/tc-proof/tc-native-proof.exe --report build/performance/windows-native.json
+
+      - name: Upload native benchmark
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-performance
+          path: build/performance/*.json
+          if-no-files-found: warn
+
       - name: Windows dialogs, WebView2 workflow and renderer recovery
         shell: pwsh
         run: ./tests/windows/run-native-flow.ps1
@@ -167,6 +178,32 @@ jobs:
 
       - name: Test (unit + headless integration proof)
         run: ctest --preset linux-release
+
+      - name: Native bridge benchmark (100000 real files)
+        run: python3 tests/performance/native_bridge.py --proof build/linux-release/tools/tc-proof/tc-native-proof --report build/performance/linux-native.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          cache-dependency-path: tools/anacrolix-proof/go.sum
+
+      - name: Build independent client audit tool
+        working-directory: tools/anacrolix-proof
+        env:
+          CGO_ENABLED: '0'
+          GOMAXPROCS: '4'
+        run: go build -p 4 -buildvcs=false -mod=readonly -o ../../build/anacrolix-proof .
+
+      - name: Independent client audit (open gates reported)
+        run: python3 tests/integration/client_compatibility.py --proof build/linux-release/tools/tc-proof/tc-proof --client build/anacrolix-proof --report build/performance/client-compatibility.json
+
+      - name: Upload performance and client evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-performance-compatibility
+          path: build/performance/*.json
+          if-no-files-found: warn
 
   ui:
     name: UI (Chromium, mocked bridge)

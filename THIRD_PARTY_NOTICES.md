@@ -19,6 +19,7 @@ those texts.
 | Microsoft.Web.WebView2 SDK | 1.0.4191.47 | Microsoft WebView2 SDK license (BSD-style) | Windows host |
 | Windows Implementation Libraries (WIL) | 1.0.260126.7 | MIT | Windows host |
 | Catch2 | 3.16.0 | BSL-1.0 | tests only, not distributed |
+| anacrolix/torrent | 1.61.0 | MPL-2.0 (with third-party dependencies recorded in go.mod/go.sum) | independent development audit only, not distributed |
 
 The Microsoft Edge WebView2 Runtime is not redistributed by development
 builds; it is installed separately (Evergreen).

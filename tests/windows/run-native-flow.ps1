@@ -39,6 +39,9 @@ try {
         Start-Sleep -Milliseconds 50
     }
     $diagnosticsPort = [int](Get-Content $portFile)
+    if ($diagnosticsPort -lt 1 -or $diagnosticsPort -gt 65535) {
+        throw "Loopback diagnostics fixture published an invalid port: $diagnosticsPort"
+    }
     Invoke-SelfTest "--self-test-flow" (Join-Path $evidence "flow.log")
 } finally {
     if (-not $fixture.HasExited) { $fixture.Kill($true); $fixture.WaitForExit() }

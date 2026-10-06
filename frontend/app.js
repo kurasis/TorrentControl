@@ -549,7 +549,8 @@ async function start() {
     }
   } catch (err) {
     $("unavailable").hidden = false;
-    if (selfTest) await request("reportSelfTest", { ok: false, error: String(err?.code ?? err) }).catch(() => {});
+    if (selfTest) await request("reportSelfTest", { ok: false, error: String(err?.code ?? err),
+      message: String(err?.message ?? err) }).catch(() => {});
   }
 }
 
