@@ -90,6 +90,9 @@ jobs:
       - name: Test (unit + headless integration proof)
         run: ctest --preset windows-x64-release
 
+      - name: Creation memory and payload IO (real files)
+        run: python tests/performance/creation_memory.py --proof build/windows-x64-release/tools/tc-proof/tc-proof.exe --report build/performance/windows-creation-memory.json
+
       - name: Native bridge benchmark (100000 real files)
         run: python tests/performance/native_bridge.py --proof build/windows-x64-release/tools/tc-proof/tc-native-proof.exe --report build/performance/windows-native.json --fixture-root build/performance/fixture
 
@@ -178,6 +181,9 @@ jobs:
 
       - name: Test (unit + headless integration proof)
         run: ctest --preset linux-release
+
+      - name: Creation memory and payload IO (real files)
+        run: python3 tests/performance/creation_memory.py --proof build/linux-release/tools/tc-proof/tc-proof --report build/performance/linux-creation-memory.json
 
       - name: Native bridge benchmark (100000 real files)
         run: python3 tests/performance/native_bridge.py --proof build/linux-release/tools/tc-proof/tc-native-proof --report build/performance/linux-native.json

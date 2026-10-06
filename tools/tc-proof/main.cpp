@@ -29,7 +29,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cstdlib>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -39,6 +41,9 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <psapi.h>
+#else
+#include <sys/resource.h>
 #endif
 
 namespace fs = std::filesystem;
@@ -46,6 +51,52 @@ using namespace tc::core;
 using nlohmann::json;
 
 namespace {
+
+std::uint64_t peak_rss()
+{
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS counters{};
+    if (!K32GetProcessMemoryInfo(GetCurrentProcess(), &counters, static_cast<DWORD>(sizeof(counters)))) return 0;
+    return static_cast<std::uint64_t>(counters.PeakWorkingSetSize);
+#else
+    rusage usage{};
+    if (getrusage(RUSAGE_SELF, &usage) != 0) return 0;
+    return static_cast<std::uint64_t>(usage.ru_maxrss) * 1024;
+#endif
+}
+
+struct PayloadIo {
+    std::uint64_t bytes = 0;
+    std::size_t opens = 0;
+    std::size_t reads = 0;
+    std::size_t max_request = 0;
+};
+class MeasuredReader final : public PayloadReader {
+public:
+    MeasuredReader(std::unique_ptr<PayloadReader> inner, PayloadIo& io) : inner_(std::move(inner)), io_(io) {}
+    std::size_t read(std::span<std::byte> buffer) override {
+        ++io_.reads;
+        io_.max_request = std::max(io_.max_request, buffer.size());
+        auto const n = inner_->read(buffer);
+        io_.bytes += n;
+        return n;
+    }
+    std::optional<native::FileObservation> observe() override { return inner_->observe(); }
+private:
+    std::unique_ptr<PayloadReader> inner_;
+    PayloadIo& io_;
+};
+class MeasuredSource final : public PayloadSource {
+public:
+    MeasuredSource(PayloadSource& inner, PayloadIo& io) : inner_(inner), io_(io) {}
+    std::unique_ptr<PayloadReader> open(ManifestEntry const& entry) override {
+        ++io_.opens;
+        return std::make_unique<MeasuredReader>(inner_.open(entry), io_);
+    }
+private:
+    PayloadSource& inner_;
+    PayloadIo& io_;
+};
 
 struct Args {
     std::vector<std::string> items;
@@ -205,6 +256,8 @@ int cmd_create(Args& a)
 
     std::stop_source stop;
     auto payload = make_file_payload_source();
+    PayloadIo io;
+    MeasuredSource measured(*payload, io);
     std::uint64_t progress_events = 0;
     CreateProgress last;
     auto on_progress = [&](CreateProgress const& p) {
@@ -215,11 +268,15 @@ int cmd_create(Args& a)
 
     json j;
     j["manifest_files"] = manifest.entries.size();
-    j["skipped"] = manifest_json(manifest)["skipped"];
+    j["skipped"] = json::array();
+    for (auto const& item : manifest.skipped)
+        j["skipped"].push_back({{"path", to_utf8(item.path)}, {"kind", std::string(to_string(item.kind))}, {"reason", item.reason}});
     try {
         // Section 14.1 step 1: reject a source collision before reading payload.
         check_output_target(out, manifest);
-        CreateResult const r = create_torrent(manifest, opt, *payload, stop.get_token(), on_progress);
+        auto const hash_start = std::chrono::steady_clock::now();
+        CreateResult const r = create_torrent(manifest, opt, measured, stop.get_token(), on_progress);
+        double const creation_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - hash_start).count();
         CommitOptions commit;
         commit.replace_existing = replace;
         commit.manifest = &manifest;
@@ -235,11 +292,19 @@ int cmd_create(Args& a)
         j["warnings"] = json::array();
         for (auto const& w : r.preflight.warnings) j["warnings"].push_back(issue_json(w));
         j["estimated_memory_bytes"] = r.preflight.estimate.memory_bytes;
+        auto const& h = r.hashing;
+        j["hashing"] = {{"unitBytes", h.unit_bytes}, {"allocatedBuffers", h.allocated_buffers},
+            {"peakPayloadBufferBytes", h.peak_payload_buffer_bytes}, {"hashWorkers", h.hash_workers},
+            {"maxReadRequestBytes", h.max_read_request_bytes}, {"hashSlotBytes", h.hash_slot_bytes},
+            {"plannedPayloadBufferBytes", r.preflight.estimate.payload_buffer_bytes}};
+        j["creationMs"] = creation_ms;
+        j["peakRssBytes"] = peak_rss();
     } catch (CoreError const& e) {
         if (e.code() != ErrorCode::Cancelled) throw;
         j["status"] = "cancelled";
     }
     j["engine"] = engine_version();
+    j["io"] = {{"bytesRead", io.bytes}, {"opens", io.opens}, {"readCalls", io.reads}, {"maxReadRequestBytes", io.max_request}};
     j["progress_events"] = progress_events;
     j["payload_bytes_read"] = last.payload_bytes_read;
     j["padding_bytes_processed"] = last.padding_bytes_processed;

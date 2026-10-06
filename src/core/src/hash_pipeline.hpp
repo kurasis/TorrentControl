@@ -9,6 +9,7 @@
 // per-piece Merkle roots over each real file. Every real byte is read once.
 
 #include "tc/core/manifest.hpp"
+#include "tc/core/hash_metrics.hpp"
 #include "tc/core/metainfo.hpp"
 #include "tc/core/payload_source.hpp"
 
@@ -48,7 +49,7 @@ struct HashJob {
     bool v2 = true;
     ReadPolicy policy = ReadPolicy::Strict;
     // Upper bound for payload bytes held in buffers at once (one unit of work
-    // may exceed it when a single piece is larger).
+    // must hold at least one complete piece).
     std::size_t buffer_budget = 128u * 1024 * 1024;
     // Largest single read request.
     std::size_t read_size = 4u * 1024 * 1024;
@@ -87,7 +88,16 @@ struct HashOutput {
     // Per layout file (Record policy fills problems; Strict never returns any).
     std::vector<FileOutcome> outcomes;
     HashProgress progress;
+    HashMetrics metrics;
 };
+
+struct BufferPlan {
+    std::size_t unit_bytes = 0;
+    std::size_t max_buffers = 0;
+    int workers = 0;
+};
+// Validates the hard payload budget, shared by preflight and execution.
+BufferPlan plan_buffers(int piece_length, std::size_t budget, int threads);
 
 HashOutput hash_payload(HashJob const& job, PayloadSource& source, std::stop_token stop,
     std::function<void(HashProgress const&)> const& progress);

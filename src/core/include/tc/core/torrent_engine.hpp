@@ -12,6 +12,7 @@
 // No libtorrent session is created; hashing performs no network activity.
 
 #include "tc/core/manifest.hpp"
+#include "tc/core/hash_metrics.hpp"
 #include "tc/core/metainfo.hpp"
 #include "tc/core/pause.hpp"
 #include "tc/core/payload_source.hpp"
@@ -87,6 +88,9 @@ struct ResourceEstimate {
     std::uint64_t metainfo_bytes = 0;
     // Rough peak memory: payload buffers, manifest and metainfo copies.
     std::uint64_t memory_bytes = 0;
+    // Exact upper bound of planned payload buffers (does not include hashes).
+    std::uint64_t payload_buffer_bytes = 0;
+    int hash_workers = 0;
 };
 
 struct PreflightReport {
@@ -126,6 +130,7 @@ struct CreateResult {
     std::uint64_t padding_bytes = 0;
     std::uint64_t manifest_revision = 0;
     PreflightReport preflight;
+    HashMetrics hashing;
 };
 
 // Hashes the manifest and returns validated metainfo bytes. Runs preflight()

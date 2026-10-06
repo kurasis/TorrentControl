@@ -211,7 +211,10 @@ PreflightReport preflight(Manifest const& manifest, CreateOptions const& options
                     + " bytes, more than 10% of the payload; consider a smaller piece size or v1",
                 Severity::Warning});
 
+        auto const buffers = detail::plan_buffers(report.piece.piece_length, options.buffer_budget, options.hash_threads);
         ResourceEstimate& est = report.estimate;
+        est.payload_buffer_bytes = buffers.unit_bytes * buffers.max_buffers;
+        est.hash_workers = buffers.workers;
         est.hash_bytes = report.piece.estimated_hash_bytes;
         est.metainfo_bytes = estimate_metainfo_bytes(manifest, options.format, est.hash_bytes);
         std::uint64_t manifest_bytes = 0;
@@ -221,7 +224,7 @@ PreflightReport preflight(Manifest const& manifest, CreateOptions const& options
         }
         // Hash results, libtorrent's copy of the layout and hashes, the
         // serialized buffer and the validation parses.
-        est.memory_bytes = options.buffer_budget + manifest_bytes * 2 + est.hash_bytes * 2 + est.metainfo_bytes * 4;
+        est.memory_bytes = est.payload_buffer_bytes + manifest_bytes * 2 + est.hash_bytes * 2 + est.metainfo_bytes * 4;
         if (est.memory_bytes > planned_memory_warning_bytes) {
             std::string const mib = std::to_string(est.memory_bytes / (1024 * 1024));
             if (!options.accept_large_resource_use)
@@ -245,80 +248,88 @@ CreateResult create_torrent(Manifest const& manifest, CreateOptions const& optio
     bool const want_v1 = options.format != TorrentFormat::V2;
     bool const want_v2 = options.format != TorrentFormat::V1;
 
-    // Map the engine's canonical file order back to manifest entries.
-    std::unordered_map<std::string, ManifestEntry const*> by_torrent_path;
-    for (auto const& e : manifest.entries) by_torrent_path.emplace(manifest.torrent_path_string(e), &e);
+    detail::HashProgress hash_progress;
+    HashMetrics hash_metrics;
+    { // Release the mapping and intermediate hash tables before serialization.
+        // Map the engine's canonical file order back to manifest entries.
+        std::unordered_map<std::string, ManifestEntry const*> by_torrent_path;
+        for (auto const& e : manifest.entries) by_torrent_path.emplace(manifest.torrent_path_string(e), &e);
 
-    detail::HashJob job;
-    job.piece_length = piece_length;
-    job.v1 = want_v1;
-    job.v2 = want_v2;
-    job.policy = detail::ReadPolicy::Strict;
-    job.buffer_budget = options.buffer_budget;
-    job.read_size = options.read_buffer_size;
-    job.threads = options.hash_threads;
-    job.pause = options.pause;
-    for (auto const fi : ct.file_range()) {
-        auto const& fe = ct.file_at(fi);
-        detail::LayoutFile f;
-        f.torrent_path = fe.filename;
-        f.length = static_cast<std::uint64_t>(fe.size);
-        f.pad = static_cast<bool>(fe.flags & lt::file_storage::flag_pad_file);
-        if (!f.pad) {
-            auto it = by_torrent_path.find(fe.filename);
-            if (it == by_torrent_path.end())
-                throw CoreError(ErrorCode::EngineError, "Engine layout contains an unmapped file: " + fe.filename);
-            f.source = it->second;
-        }
-        job.files.push_back(std::move(f));
-    }
-
-    std::function<void(detail::HashProgress const&)> forward;
-    if (progress) {
-        forward = [&](detail::HashProgress const& h) {
-            CreateProgress p;
-            p.payload_bytes_read = h.payload_bytes_read;
-            p.payload_bytes_total = h.payload_bytes_total;
-            p.padding_bytes_processed = h.padding_bytes_processed;
-            p.padding_bytes_total = h.padding_bytes_total;
-            p.files_completed = h.files_completed;
-            p.files_total = h.files_total;
-            p.current_file = h.current_file;
-            progress(p);
-        };
-    }
-    detail::HashOutput const hashed = detail::hash_payload(job, source, stop, forward);
-
-    try {
-        for (std::size_t i = 0; i < hashed.v1_pieces.size(); ++i)
-            ct.set_hash(lt::piece_index_t{static_cast<int>(i)},
-                lt::sha1_hash(reinterpret_cast<char const*>(hashed.v1_pieces[i].data())));
+        detail::HashJob job;
+        job.piece_length = piece_length;
+        job.v1 = want_v1;
+        job.v2 = want_v2;
+        job.policy = detail::ReadPolicy::Strict;
+        job.buffer_budget = options.buffer_budget;
+        job.read_size = options.read_buffer_size;
+        job.threads = options.hash_threads;
+        job.pause = options.pause;
         for (auto const fi : ct.file_range()) {
-            auto const& roots = hashed.v2_piece_roots[static_cast<std::size_t>(static_cast<int>(fi))];
-            for (std::size_t k = 0; k < roots.size(); ++k)
-                ct.set_hash2(fi, lt::piece_index_t::diff_type{static_cast<int>(k)},
-                    lt::sha256_hash(reinterpret_cast<char const*>(roots[k].data())));
+            auto const& fe = ct.file_at(fi);
+            detail::LayoutFile f;
+            f.torrent_path = fe.filename;
+            f.length = static_cast<std::uint64_t>(fe.size);
+            f.pad = static_cast<bool>(fe.flags & lt::file_storage::flag_pad_file);
+            if (!f.pad) {
+                auto it = by_torrent_path.find(fe.filename);
+                if (it == by_torrent_path.end())
+                    throw CoreError(ErrorCode::EngineError, "Engine layout contains an unmapped file: " + fe.filename);
+                f.source = it->second;
+            }
+            job.files.push_back(std::move(f));
         }
 
-        // Tier numbers follow the order of non-empty tiers.
-        int tier = 0;
-        for (auto const& tier_urls : options.tracker_tiers) {
-            if (tier_urls.empty()) continue;
-            for (auto const& url : tier_urls) ct.add_tracker(url, tier);
-            ++tier;
+        std::function<void(detail::HashProgress const&)> forward;
+        if (progress) {
+            forward = [&](detail::HashProgress const& h) {
+                CreateProgress p;
+                p.payload_bytes_read = h.payload_bytes_read;
+                p.payload_bytes_total = h.payload_bytes_total;
+                p.padding_bytes_processed = h.padding_bytes_processed;
+                p.padding_bytes_total = h.padding_bytes_total;
+                p.files_completed = h.files_completed;
+                p.files_total = h.files_total;
+                p.current_file = h.current_file;
+                progress(p);
+            };
         }
-        for (auto const& seed : options.web_seeds) ct.add_url_seed(seed);
-        for (auto const& node : options.dht_nodes) ct.add_node(node);
-        if (!options.comment.empty()) ct.set_comment(options.comment.c_str());
-        if (!options.creator.empty()) ct.set_creator(options.creator.c_str());
-        ct.set_creation_date(static_cast<std::time_t>(options.creation_date.value_or(0)));
-        ct.set_priv(options.private_flag);
-    } catch (lt::system_error const& e) {
-        throw CoreError(ErrorCode::EngineError, std::string("The engine rejected the torrent metadata: ") + e.what())
-            .with_phase(Phase::Building);
+        detail::HashOutput const hashed = detail::hash_payload(job, source, stop, forward);
+        hash_progress = hashed.progress;
+        hash_metrics = hashed.metrics;
+
+        try {
+            for (std::size_t i = 0; i < hashed.v1_pieces.size(); ++i)
+                ct.set_hash(lt::piece_index_t{static_cast<int>(i)},
+                    lt::sha1_hash(reinterpret_cast<char const*>(hashed.v1_pieces[i].data())));
+            for (auto const fi : ct.file_range()) {
+                auto const& roots = hashed.v2_piece_roots[static_cast<std::size_t>(static_cast<int>(fi))];
+                for (std::size_t k = 0; k < roots.size(); ++k)
+                    ct.set_hash2(fi, lt::piece_index_t::diff_type{static_cast<int>(k)},
+                        lt::sha256_hash(reinterpret_cast<char const*>(roots[k].data())));
+            }
+
+            // Tier numbers follow the order of non-empty tiers.
+            int tier = 0;
+            for (auto const& tier_urls : options.tracker_tiers) {
+                if (tier_urls.empty()) continue;
+                for (auto const& url : tier_urls) ct.add_tracker(url, tier);
+                ++tier;
+            }
+            for (auto const& seed : options.web_seeds) ct.add_url_seed(seed);
+            for (auto const& node : options.dht_nodes) ct.add_node(node);
+            if (!options.comment.empty()) ct.set_comment(options.comment.c_str());
+            if (!options.creator.empty()) ct.set_creator(options.creator.c_str());
+            ct.set_creation_date(static_cast<std::time_t>(options.creation_date.value_or(0)));
+            ct.set_priv(options.private_flag);
+        } catch (lt::system_error const& e) {
+            throw CoreError(ErrorCode::EngineError, std::string("The engine rejected the torrent metadata: ") + e.what())
+                .with_phase(Phase::Building);
+        }
+
     }
 
     CreateResult result;
+    result.hashing = hash_metrics;
     try {
         std::vector<char> const buf = ct.generate_buf();
         result.torrent_bytes.assign(buf.begin(), buf.end());
@@ -361,8 +372,8 @@ CreateResult create_torrent(Manifest const& manifest, CreateOptions const& optio
 
     result.piece_length = piece_length;
     result.num_pieces = ct.num_pieces();
-    result.payload_bytes = hashed.progress.payload_bytes_total;
-    result.padding_bytes = hashed.progress.padding_bytes_total;
+    result.payload_bytes = hash_progress.payload_bytes_total;
+    result.padding_bytes = hash_progress.padding_bytes_total;
     result.manifest_revision = manifest.revision;
     result.preflight = std::move(report);
     return result;
