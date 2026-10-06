@@ -12,6 +12,9 @@ those texts.
 | try_signal (libtorrent dependency) | pinned by the libtorrent port | BSD-3-Clause | core |
 | Boost (Asio, System and other libtorrent dependencies) | 1.92.0 | BSL-1.0 | core |
 | OpenSSL (libtorrent crypto) | 3.6.5 | Apache-2.0 | core |
+| curl | 8.22.0 | curl license (MIT-style) | diagnostics; SChannel on Windows, OpenSSL on Linux |
+| c-ares | 1.34.8 | MIT | bounded asynchronous DNS for diagnostics |
+| zlib (curl dependency) | 1.3.2 | Zlib | diagnostics |
 | nlohmann/json | 3.12.0 | MIT | bridge, tools |
 | Microsoft.Web.WebView2 SDK | 1.0.4191.47 | Microsoft WebView2 SDK license (BSD-style) | Windows host |
 | Windows Implementation Libraries (WIL) | 1.0.260126.7 | MIT | Windows host |

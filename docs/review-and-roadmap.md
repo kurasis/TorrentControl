@@ -185,11 +185,12 @@ indices, пагинация verification и metadata, предел исходя�
    сохраняют raw info; info edits показывают изменение идентификаторов;
    structural edits требуют rebuild; signatures не удаляются молча. Binary
    keys/large integers не теряются. BEP 17 httpseeds редактируются на outer layer.
-3. **Реализовать M3: диагностику.** Отдельный DiagnosticsService для HTTP/UDP
+3. **M3: диагностика — реализована.** Отдельный DiagnosticsService для HTTP/UDP
    trackers и BEP 19/17 web seeds; явный запуск, ограниченные таймауты и
    параллелизм, cancellation, redaction и результаты с временем проверки.
    Начать с локальных HTTP/UDP fixtures N/S, не обращаться к публичным трекерам
    в тестах. Разделить «URL записан» и «сервер проверен» в интерфейсе.
+   Реализация, ограничения и fixtures: [отчёт диагностики](m3-network-diagnostics.md).
 4. **Закрыть performance и совместимость.** Native UI benchmark, single-pass
    instrumentation, память/IO на больших деревьях и slow/UNC sources. Проверить
    созданные v1/v2/hybrid torrents в двух независимо реализованных движках;

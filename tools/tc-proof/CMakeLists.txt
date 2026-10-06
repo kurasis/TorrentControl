@@ -6,3 +6,7 @@ tc_set_warnings(tc-proof)
 if(WIN32)
     target_sources(tc-proof PRIVATE ${PROJECT_SOURCE_DIR}/src/app/windows/long_path_aware.manifest)
 endif()
+
+add_executable(tc-network-proof network_main.cpp)
+target_link_libraries(tc-network-proof PRIVATE TorrentControl::service)
+tc_set_warnings(tc-network-proof)

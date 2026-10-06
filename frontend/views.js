@@ -5,6 +5,7 @@ import { has, t } from "./i18n.js";
 import { h, replace } from "./dom.js";
 import { exactBytes, formatBytes, formatDuration, percent, PIECE_SIZES } from "./format.js";
 import { VirtualList } from "./virtual-list.js";
+import { renderDiagnostics } from "./diagnostics.js";
 import { renderMetadataEditor } from "./metadata-editor.js";
 
 const TABS = ["files", "general", "trackers", "webSeeds", "metadata", "expert", "jobs"];
@@ -34,6 +35,7 @@ export function workspaceKey(state) {
     state.selectedSource,
     state.torrent?.id,
     state.editor?.version,
+    state.diagnosticVersion,
     state.profiles.map((p) => p.id),
     state.validation?.draftRevision,
     job ? [job.id, job.version] : null,
@@ -394,7 +396,7 @@ function renderTrackersTab(state, actions) {
         commit();
       },
     }, t("applyPaste")),
-    note("checksLater"));
+    renderDiagnostics(state, actions, "trackers"));
 }
 
 function resolvedSeed(url, state) {
@@ -444,7 +446,7 @@ function renderWebSeedsTab(state, actions) {
         commit();
       },
     }, t("addWebSeed")),
-    note("checksLater"));
+    renderDiagnostics(state, actions, "web-seeds"));
 }
 
 function renderMetadataTab(state, actions) {
@@ -513,7 +515,8 @@ function renderExpertTab(state, actions) {
       h("button", { type: "button", id: "expert-open", onclick: () => actions.openTorrent() }, t("openTorrent"))),
     h("h3", {}, t("summaryFiles")),
     files,
-    renderMetadataEditor(state, actions.renderEditor, actions.metadataSaved));
+    renderMetadataEditor(state, actions.renderEditor, actions.metadataSaved),
+    renderDiagnostics(state, actions, "trackers", tor.id));
 }
 
 function renderJobsTab(state, actions) {

@@ -57,12 +57,14 @@ json entry_json(core::Manifest const& m, core::ManifestEntry const& e)
 
 AppService::AppService(Options options, EventSink sink) : options_(std::move(options)), sink_(std::move(sink))
 {
+    catalog_managed_urls_ = builtin_tracker_catalog().urls;
     if (!options_.now) options_.now = system_now;
     if (!options_.settings_path.empty()) settings_ = load_settings(options_.settings_path);
     options_.jobs.max_concurrent = settings_.max_concurrent_jobs;
     jobs_ = std::make_unique<JobScheduler>(options_.jobs, [this](JobSnapshot const& s) {
         emit(json{{"type", "job"}, {"job", to_json(s)}});
     });
+    diagnostics_ = std::make_unique<DiagnosticsService>([this](json const& event) { emit(event); });
     scan_ = std::make_shared<ScanResult>();
 
     // A new draft starts from the last used profile.
@@ -83,6 +85,7 @@ AppService::~AppService()
     scan_cv_.notify_all();
     scan_thread_ = {};
     jobs_.reset(); // cancels and joins jobs before the sink goes away
+    diagnostics_.reset();
 }
 
 void AppService::emit(json event)
@@ -904,7 +907,7 @@ json AppService::snapshot() const
     json jobs = json::array();
     for (auto const& s : jobs_->snapshot()) jobs.push_back(to_json(s));
     json j{{"draft", draft_json()}, {"scan", scan_state()}, {"jobs", std::move(jobs)}, {"settings", settings_json()},
-        {"profiles", profiles_json()}};
+        {"profiles", profiles_json()}, {"diagnostics", diagnostics_->snapshot()}};
     std::lock_guard lock(mutex_);
     if (batch_) j["batch"] = to_json(*batch_);
     j["torrent"] = selected_torrent_;
@@ -931,6 +934,117 @@ fs::path AppService::suggested_folder() const
     if (!draft_.output.empty()) return draft_.output.parent_path();
     if (!draft_.sources.empty()) return fs::absolute(draft_.sources.front().path).lexically_normal().parent_path();
     return {};
+}
+
+// ---- Explicit network diagnostics --------------------------------------------
+std::vector<ProbeTarget> AppService::collect_diagnostic_targets_locked(std::string const& kind, std::string const& torrent_id) const
+{
+    if (!torrent_id.empty()) {
+        auto it = torrents_.find(torrent_id);
+        if (it == torrents_.end()) throw ServiceError("NOT_FOUND", "No such torrent");
+        return torrent_probe_targets(*it->second.meta, kind);
+    }
+    std::vector<ProbeTarget> targets;
+    if (kind == "trackers") {
+        for (auto const& row : draft_.trackers) if (row.enabled && !row.url.empty())
+            targets.push_back({"endpoint-" + std::to_string(targets.size() + 1), row.url, "tracker", {}, 0});
+    } else if (kind == "web-seeds") {
+        if (scan_->state != "ready" || !scan_->manifest) throw ServiceError("SCAN_REQUIRED", "Scan the payload before checking web seed paths");
+        auto const& manifest = *scan_->manifest;
+        std::vector<core::MetainfoFile> samples;
+        if (!manifest.entries.empty()) {
+            auto sample = [&](core::ManifestEntry const& e) {
+                if (std::any_of(samples.begin(), samples.end(), [&](auto const& f) { return f.path == e.torrent_path; })) return;
+                core::MetainfoFile f;
+                f.path = e.torrent_path; f.torrent_path = manifest.torrent_path_string(e); f.length = e.length;
+                samples.push_back(std::move(f));
+            };
+            sample(manifest.entries.front());
+            auto nested = std::find_if(manifest.entries.begin(), manifest.entries.end(), [](auto const& e) { return e.torrent_path.size() > 1; });
+            if (nested != manifest.entries.end()) sample(*nested);
+            sample(manifest.entries.back());
+        }
+        for (auto const& url : draft_.web_seeds) for (auto const& file : samples) {
+            std::string resolved;
+            std::string probe_kind = "bep19";
+            try { resolved = resolve_web_seed(url, manifest.name, file); }
+            catch (ServiceError const&) { resolved = url; probe_kind = "bep19-invalid-base"; }
+            targets.push_back({"endpoint-" + std::to_string(targets.size() + 1), resolved, probe_kind, file.torrent_path, file.length, manifest.entries.size()});
+        }
+    } else throw ServiceError("INVALID_ARGUMENT", "Diagnostic kind must be trackers or web-seeds");
+    if (targets.size() > 256) throw ServiceError("RESOURCE_LIMIT", "At most 256 diagnostic targets per run");
+    return targets;
+}
+json AppService::diagnostic_targets(std::string const& kind, std::string const& torrent_id) const
+{
+    std::lock_guard lock(mutex_);
+    json rows = json::array();
+    for (auto const& target : collect_diagnostic_targets_locked(kind, torrent_id))
+        rows.push_back({{"id",target.id},{"url",redact_url(target.url)},{"file",target.torrent_path},{"kind",target.kind},{"totalFiles",target.total_files}});
+    return {{"targets",std::move(rows)},{"kind",kind},{"torrentId",torrent_id}};
+}
+std::string AppService::start_diagnostics(std::string const& kind, std::string const& torrent_id, NetworkPolicy policy)
+{
+    std::vector<ProbeTarget> targets;
+    { std::lock_guard lock(mutex_); targets = collect_diagnostic_targets_locked(kind, torrent_id); }
+    return diagnostics_->start(std::move(targets), std::move(policy));
+}
+std::string AppService::update_tracker_catalog(NetworkPolicy policy)
+{
+    policy.refresh = true;
+    return diagnostics_->start({{"catalog",builtin_tracker_catalog().source_url,"catalog",{},0}}, std::move(policy));
+}
+json AppService::plan_catalog_apply() const
+{
+    auto catalog = diagnostics_->catalog();
+    std::lock_guard lock(mutex_);
+    auto next = draft_.trackers;
+    auto const& builtin = catalog_managed_urls_;
+    std::set<std::string> incoming;
+    for (auto const& url : catalog["urls"]) incoming.insert(url.get<std::string>());
+    json added = json::array(), removed = json::array();
+    if (!draft_.private_flag) {
+        next.erase(std::remove_if(next.begin(), next.end(), [&](auto const& row) {
+            bool remove = row.enabled && std::find(builtin.begin(), builtin.end(), row.url) != builtin.end() && !incoming.contains(row.url);
+            if (remove) removed.push_back(redact_url(row.url));
+            return remove;
+        }), next.end());
+        for (auto const& url : catalog["urls"]) {
+            auto value = url.get<std::string>();
+            if (std::none_of(next.begin(), next.end(), [&](auto const& row) { return row.url == value; })) added.push_back(redact_url(value));
+        }
+    }
+    return {{"checksum",catalog["checksum"]},{"source",catalog["source"]},{"fetchedAt",catalog["fetchedAt"]},
+        {"added",std::move(added)},{"removed",std::move(removed)},{"privateBlocked",draft_.private_flag},{"draftRevision",std::to_string(draft_.revision)}};
+}
+json AppService::apply_catalog(std::string const& checksum, std::optional<std::uint64_t> revision)
+{
+    auto catalog = diagnostics_->catalog();
+    std::lock_guard lock(mutex_);
+    check_revision(revision);
+    if (!catalog["checksum"].is_string() || catalog["checksum"].get<std::string>() != checksum)
+        throw ServiceError("STALE_CATALOG", "Review the latest fetched catalog before applying it");
+    if (draft_.private_flag) throw ServiceError("PRIVATE_CATALOG", "Public catalog endpoints cannot be added to a private draft");
+    undo_.push_back(draft_);
+    if (undo_.size() > max_undo) undo_.erase(undo_.begin());
+    std::set<std::string> incoming;
+    for (auto const& url : catalog["urls"]) incoming.insert(url.get<std::string>());
+    auto const& builtin = catalog_managed_urls_;
+    draft_.trackers.erase(std::remove_if(draft_.trackers.begin(), draft_.trackers.end(), [&](auto const& row) {
+        return row.enabled && std::find(builtin.begin(), builtin.end(), row.url) != builtin.end() && !incoming.contains(row.url);
+    }), draft_.trackers.end());
+    int tier = 0;
+    for (auto const& row : draft_.trackers) tier = std::max(tier, row.tier + 1);
+    for (auto const& url : catalog["urls"]) {
+        auto value = url.get<std::string>();
+        if (std::none_of(draft_.trackers.begin(), draft_.trackers.end(), [&](auto const& row) { return row.url == value; })) {
+            if (std::find(catalog_managed_urls_.begin(), catalog_managed_urls_.end(), value) == catalog_managed_urls_.end())
+                catalog_managed_urls_.push_back(value);
+            draft_.trackers.push_back({std::move(value), tier++, true});
+        }
+    }
+    bump_locked(false);
+    return draft_json_locked();
 }
 
 } // namespace tc::service

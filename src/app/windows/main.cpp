@@ -251,6 +251,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     AppState app;
     bool native_flow = false;
     bool settings_test = false;
+    int diagnostics_port = 0;
     std::optional<std::wstring> self_test_data;
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -261,6 +262,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
             native_flow = arg != L"--self-test";
             app.self_test_log = argv[++i];
         } else if (arg == L"--self-test-data" && i + 1 < argc) self_test_data = argv[++i];
+        else if (arg == L"--self-test-diagnostics-port" && i + 1 < argc) diagnostics_port = _wtoi(argv[++i]);
     }
     LocalFree(argv);
     bool const self_test = app.self_test_log.has_value();
@@ -326,6 +328,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         HWND const window = hwnd;
         AppState* const state = &app;
         if (native_flow) {
+            app.dispatcher.register_operation("prepareSelfTestDiagnostics", [state, diagnostics_port](nlohmann::json const&) {
+                if (diagnostics_port < 1 || diagnostics_port > 65535)
+                    throw tc::bridge::BridgeError("SELF_TEST", "Local diagnostics fixture port is required");
+                auto const base = "http://127.0.0.1:" + std::to_string(diagnostics_port);
+                return state->service->update_draft({{"trackers", nlohmann::json::array({
+                    {{"url", base + "/announce?token=fixture-secret"}, {"tier", 0}, {"enabled", true}}})},
+                    {"webSeeds", nlohmann::json::array({base + "/seed/"})}}, std::nullopt);
+            });
             app.dispatcher.register_operation("selfTestStep", [state](nlohmann::json const& payload) {
                 write_self_test_log(*state, "STEP " + payload.value("name", ""));
                 return state->native_test->step(payload);

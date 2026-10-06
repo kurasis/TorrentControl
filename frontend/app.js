@@ -15,6 +15,12 @@ export const state = {
   jobs: new Map(),
   settings: { mode: "simple", theme: "system", language: "" },
   profiles: [],
+  diagnosticPolicy: { networkMode: "direct", httpProxy: "", refresh: false, udpRetry: false },
+  diagnosticRun: null,
+  diagnosticPage: null,
+  diagnosticOffset: 0,
+  diagnosticError: "",
+  diagnosticVersion: 0,
   torrent: null,
   editor: null,
   editorPreview: null,
@@ -144,6 +150,53 @@ const sendPatchSoon = debounce(sendPatch, 350);
 
 export const actions = {
   renderEditor: () => invalidate("workspace"),
+  renderDiagnostics() { state.diagnosticVersion++; invalidate("workspace"); },
+  reloadSnapshot: () => refresh(),
+  async loadDiagnostics(offset = state.diagnosticOffset) {
+    if (!state.diagnosticRun) return;
+    const id = state.diagnosticRun.id;
+    const page = await request("getDiagnosticPage", { runId: id, offset, limit: 50 });
+    if (state.diagnosticRun?.id !== id) return;
+    state.diagnosticPage = page; state.diagnosticRun = page.run; state.diagnosticOffset = offset;
+    actions.renderDiagnostics();
+  },
+  async startDiagnostics(kind, torrentId = "") {
+    state.diagnosticError = "";
+    try {
+      await sendPatch();
+      const policy = { ...state.diagnosticPolicy };
+      if (policy.networkMode === "direct") policy.httpProxy = "";
+      const result = await request("startDiagnostics", { kind, torrentId, ...policy });
+      state.diagnosticRun = { id: result.runId, state: "running", completed: 0, total: 0, network: policy.networkMode };
+      state.diagnosticOffset = 0;
+      await actions.loadDiagnostics(0);
+    } catch (error) { state.diagnosticError = `${error.code}: ${error.message}`; }
+    actions.renderDiagnostics();
+  },
+  async cancelDiagnostics() {
+    if (state.diagnosticRun) await guarded(request("cancelDiagnostics", { runId: state.diagnosticRun.id }));
+  },
+  async updateCatalog() {
+    state.diagnosticError = "";
+    try {
+      const policy = { ...state.diagnosticPolicy };
+      if (policy.networkMode === "direct") policy.httpProxy = "";
+      const r = await request("updateTrackerCatalog", policy);
+      state.diagnosticRun = { id: r.runId, state: "running", completed: 0, total: 1, network: policy.networkMode };
+      await actions.loadDiagnostics(0);
+    } catch (error) { state.diagnosticError = `${error.code}: ${error.message}`; }
+    actions.renderDiagnostics();
+  },
+  async reviewCatalog() {
+    const plan = await guarded(request("planCatalogApply"));
+    if (!plan) return;
+    if (plan.privateBlocked) return toast(t("diagnosticCatalogPrivate"), { error: true });
+    if (!plan.checksum) return toast(t("diagnosticCatalogNotFetched"));
+    const text = `${plan.source}\n+ ${plan.added.join("\n+ ")}\n− ${plan.removed.join("\n− ")}`;
+    if (!await showConfirm(t("diagnosticCatalogReview"), text)) return;
+    const result = await guarded(request("applyTrackerCatalog", { checksum: plan.checksum }, { draftRevision: plan.draftRevision }));
+    if (result?.draft) applyDraft(result.draft);
+  },
   async selectSources(kind) {
     const r = await guarded(request("selectSources", { kind }));
     if (r?.draft) applyDraft(r.draft);
@@ -384,6 +437,12 @@ function onJob(job) {
 
 onEvent((type, payload) => {
   if (type === "job" && payload.job) onJob(payload.job);
+  else if (type === "diagnostics" && payload.run) {
+    if (state.diagnosticRun?.sequence && payload.run.sequence && BigInt(payload.run.sequence) < BigInt(state.diagnosticRun.sequence)) return;
+    if (state.diagnosticRun?.id === payload.run.id && state.diagnosticRun.completed > payload.run.completed) return;
+    state.diagnosticRun = payload.run;
+    actions.loadDiagnostics().catch(() => {});
+  }
   else if (type === "scan") {
     if (state.draft?.scan && payload.sourcesRevision !== state.draft.scan.sourcesRevision && payload.state !== "scanning") {
       // A result for an older source set; a refresh brings the current one.
@@ -417,6 +476,11 @@ async function refresh() {
   state.scan = snap.scan;
   state.settings = snap.settings;
   state.profiles = snap.profiles;
+  state.diagnosticRun = (snap.diagnostics ?? []).at(-1) ?? null;
+  if (state.diagnosticRun) {
+    state.diagnosticPolicy.networkMode = state.diagnosticRun.network;
+    await actions.loadDiagnostics(0);
+  }
   state.torrent = snap.torrent ?? null;
   state.editorPreview = snap.editorPreview ?? null;
   if (state.torrent) {

@@ -12,6 +12,7 @@
 #include "tc/core/field_registry.hpp"
 #include "tc/service/batch.hpp"
 #include "tc/service/draft.hpp"
+#include "tc/service/diagnostics.hpp"
 #include "tc/service/jobs.hpp"
 #include "tc/service/profiles.hpp"
 #include "tc/service/storage.hpp"
@@ -101,6 +102,12 @@ public:
     nlohmann::json editor_preview(std::string const& token) const;
     nlohmann::json choose_editor_output(std::string const& token, std::filesystem::path const& path);
     nlohmann::json save_torrent_edit(std::string const& token, bool replace_existing);
+    nlohmann::json diagnostic_targets(std::string const& kind, std::string const& torrent_id = {}) const;
+    std::string start_diagnostics(std::string const& kind, std::string const& torrent_id, NetworkPolicy policy);
+    DiagnosticsService& diagnostics() { return *diagnostics_; }
+    std::string update_tracker_catalog(NetworkPolicy policy);
+    nlohmann::json plan_catalog_apply() const;
+    nlohmann::json apply_catalog(std::string const& checksum, std::optional<std::uint64_t> revision);
 
     // ---- Projects and settings -------------------------------------------------
     void save_project(std::filesystem::path const& path);
@@ -133,6 +140,7 @@ private:
     };
 
     void check_revision(std::optional<std::uint64_t> revision) const;
+    std::vector<ProbeTarget> collect_diagnostic_targets_locked(std::string const& kind, std::string const& torrent_id) const;
     void bump_locked(bool sources_changed);
     void start_scan_locked();
     void scan_worker(std::stop_token shutdown);
@@ -169,7 +177,9 @@ private:
     // its previous token, including any output selected for that token.
     std::map<std::string, PendingEdit> edits_;
     std::uint64_t next_edit_ = 1;
+    std::vector<std::string> catalog_managed_urls_;
     std::unique_ptr<JobScheduler> jobs_;
+    std::unique_ptr<DiagnosticsService> diagnostics_;
 };
 
 } // namespace tc::service

@@ -47,6 +47,10 @@ export async function runNativeFlow(actions, state, info) {
     check(state.draft.revision === saved.revision, "Recovery changed the draft");
     check(JSON.stringify([...state.jobs.keys()].sort()) === JSON.stringify(saved.jobs), "Recovery replayed or lost jobs");
     check(state.settings.language === "ru" && state.settings.theme === "dark", "Recovery lost settings");
+    if (saved.diagnosticId) {
+      check(state.diagnosticRun?.id === saved.diagnosticId && state.diagnosticRun.state === "completed", "Recovery lost diagnostics");
+      check(state.diagnosticPage?.rows.length === 2, "Recovery lost seed observations");
+    }
     if (saved.editorToken) {
       check(state.torrent?.id === saved.torrentId, "Recovery lost the opened editor torrent");
       check(state.editorPreview?.token === saved.editorToken, "Recovery lost the native metadata preview");
@@ -111,6 +115,24 @@ export async function runNativeFlow(actions, state, info) {
   const disk = await request("checkSelfTestOutput");
   check(disk.identical && disk.magnet === `${magnet}\n`, "Project bytes or exported magnet changed on disk");
 
+  await request("prepareSelfTestDiagnostics");
+  await actions.reloadSnapshot();
+  await actions.updateSettings({ mode: "advanced" });
+  actions.setTab("trackers");
+  await until(() => document.getElementById("diagnostics-check-trackers"), "tracker diagnostics control");
+  document.getElementById("diagnostics-check-trackers").click();
+  await until(() => state.diagnosticRun?.state === "completed" && state.diagnosticPage?.rows.length === 1, "HTTP tracker probe");
+  check(state.diagnosticPage.rows[0].state === "protocol-responding", "Zero-peer tracker response was rejected");
+  check(!JSON.stringify(state.diagnosticPage).includes("fixture-secret"), "Diagnostics exported a URL secret");
+  const trackerRun = state.diagnosticRun.id;
+  actions.setTab("webSeeds");
+  await until(() => document.getElementById("diagnostics-check-web-seeds"), "seed diagnostics control");
+  document.getElementById("diagnostics-check-web-seeds").click();
+  await until(() => state.diagnosticRun?.id !== trackerRun && state.diagnosticRun?.state === "completed"
+    && state.diagnosticPage?.rows.length === 2, "sampled seed probes");
+  check(state.diagnosticPage.rows.every((row) => row.state === "range-supported" && row.integrity === "not-verified"), "Seed range checks failed");
+  Object.assign(evidence, { networkDiagnostics: true, seedSamplesVerified: 2 });
+
   // Use the actual HTML controls and Save As dialogs for metadata edits.
   await request("selfTestStep", { name: "hybrid" });
   await actions.openTorrent();
@@ -172,6 +194,7 @@ export async function runNativeFlow(actions, state, info) {
   // Store the checkpoint natively before crashing; a recovered page must get
   // its state from getSnapshot and must not repeat any earlier operation.
   await request("crashSelfTestRenderer", { revision: snapshot.draft.revision,
-    jobs: snapshot.jobs.map((j) => j.id).sort(), torrentId: state.torrent.id, editorToken: pending.token, evidence });
+    jobs: snapshot.jobs.map((j) => j.id).sort(), torrentId: state.torrent.id, editorToken: pending.token,
+    diagnosticId: state.diagnosticRun.id, evidence });
   return null;
 }

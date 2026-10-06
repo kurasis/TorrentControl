@@ -12,7 +12,7 @@ constexpr FieldDescriptor fields[] = {
     {"top","announce","str","all","form",true,false,"BEP 3","tracker-url"},
     {"top","announce-list","list","all","form",true,false,"BEP 12","tracker-tiers"},
     {"top","url-list","str|list","all","form",true,false,"BEP 19","web-seeds"},
-    {"top","httpseeds","list","all","form",true,false,"BEP 17","http-seeds"},
+    {"top","httpseeds","list","v1,hybrid","form",true,false,"BEP 17","http-seeds"},
     {"top","nodes","list","all","expert",true,false,"BEP 5","nodes"},
     {"top","comment","str","all","form",true,false,"BEP 3","text"},
     {"top","created by","str","all","form",true,false,"BEP 3","text"},
@@ -179,6 +179,8 @@ MetadataPreview preview_metadata_edit(Metainfo const& original, OuterEdit const&
     if (!validate_metainfo(original, false).empty()) throw CoreError(ErrorCode::InvalidMetainfo, "Repair or rebuild the imported torrent before editing it");
     auto top_changes = changes(original.root(), outer, "top");
     auto info_changes = changes(original.info(), info, "info");
+    if (original.format() == MetainfoFormat::V2 && top_changes.contains("httpseeds") && top_changes.at("httpseeds"))
+        throw CoreError(ErrorCode::UnsupportedFormat, "BEP 17 cannot be configured for pure v2 without a tested client-specific profile");
     if (!info_changes.empty() && original.has_legacy_root_hash())
         throw CoreError(ErrorCode::UnsupportedFormat, "Legacy Merkle torrents require a dedicated rebuild workflow");
     // Prevent two conflicting legacy comment aliases from being silently kept.

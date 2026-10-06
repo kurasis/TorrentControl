@@ -49,6 +49,9 @@
   const values = { "top:comment": { t: "str", utf8: "Original comment" }, "info:source": { t: "str", utf8: "old" },
     "info:pieces": { t: "bytes", hex: "00ff" } };
   let editorCounter = 0;
+  let diagnosticRun = config.diagnosticRun ?? null;
+  const diagnosticRows = config.diagnosticRows ?? [{ endpoint: "http://tracker.example:80", kind: "tracker", operation: "scrape-random-hash", state: "protocol-responding", checkedAt: "1791158400", cached: false, integrity: "not-verified", attempts: [{ family: 4, state: "protocol-responding", httpStatus: 200, latencyMs: 4 }] }];
+  let diagnosticCounter = 0;
 
   function snapshotDraft() {
     return { ...draft, revision: String(revision), scan, outputAuto: true, canUndo: false };
@@ -85,7 +88,16 @@
     checkSelfTestProfile: (p) => ({ persisted: config.selfTestPersistence !== false
       && profiles.some((profile) => profile.id === p.profileId && profile.name === p.name) }),
     getEngineInfo: () => ({ appVersion: "0.0.0-test", engineVersion: "libtorrent 2.1.2", protocolVersion: 1 }),
-    getSnapshot: () => ({ draft: snapshotDraft(), scan, jobs, settings, profiles, torrent, editorPreview }),
+    getSnapshot: () => ({ draft: snapshotDraft(), scan, jobs, settings, profiles, torrent, editorPreview, diagnostics: diagnosticRun ? [diagnosticRun] : [] }),
+    startDiagnostics: (p) => {
+      if (p.networkMode === "http-proxy" && !p.httpProxy) throw Object.assign(new Error("Specify the proxy origin"), { code: "INVALID_PROXY" });
+      diagnosticRun = { id: `diagnostic-${++diagnosticCounter}`, sequence: String(diagnosticCounter), state: config.diagnosticBusy ? "running" : "completed", total: diagnosticRows.length, completed: config.diagnosticBusy ? 0 : diagnosticRows.length, network: p.networkMode };
+      return { runId: diagnosticRun.id };
+    },
+    getDiagnosticPage: (p) => ({ run: diagnosticRun, rows: diagnosticRun.state === "running" ? [] : diagnosticRows.slice(p.offset, p.offset + p.limit), total: diagnosticRun.completed }),
+    cancelDiagnostics: () => { diagnosticRun = { ...diagnosticRun, state: "cancelled" }; emit("diagnostics", { run: diagnosticRun }); return {}; },
+    planCatalogApply: () => ({ checksum: "a".repeat(64), source: "https://catalog.example/list", added: ["udp://new.example:80/announce"], removed: [], privateBlocked: draft.private, draftRevision: String(revision) }),
+    applyTrackerCatalog: () => { draft.trackers.push({ url: "udp://new.example:80/announce", enabled: true, tier: 1 }); bump(); return { draft: snapshotDraft() }; },
     openTorrent: () => {
       torrent = { id: "t-1", name: "Original", format: "hybrid", path: "C:\\data\\original.torrent", problems: [],
         realFiles: 1, paddingFiles: 0, payloadBytes: "100", pieceLength: "16384", infohashV1: "a".repeat(40), infohashV2: "b".repeat(64) };
