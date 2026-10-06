@@ -101,6 +101,8 @@ read only = yes
         assert run('stat', '-f', '-c', '%T', str(self.mount)) in ('smb2', 'cifs'), 'The source must be a kernel CIFS mount'
 
     def start_server(self):
+        if self.server and self.server.stdin:
+            self.server.stdin.close()
         if self.server_log:
             self.server_log.close()
         self.server_log = (self.root / 'server-stdout.log').open('a', encoding='utf-8')
@@ -110,7 +112,11 @@ read only = yes
                        if key not in ('NOTIFY_SOCKET', 'LISTEN_FDS', 'LISTEN_PID', 'LISTEN_FDNAMES')}
         self.server = subprocess.Popen(['ip', 'netns', 'exec', self.namespace, 'smbd', '-F', '--no-process-group',
                                        '--debug-stdout', '-d', '3', '-s', str(self.config)],
-                                       stdout=self.server_log, stderr=subprocess.STDOUT, start_new_session=True, env=environment)
+                                       # Foreground smbd monitors stdin. A CI step
+                                       # supplies EOF immediately, so keep a private
+                                       # pipe open for the lifetime of this server.
+                                       stdin=subprocess.PIPE, stdout=self.server_log, stderr=subprocess.STDOUT,
+                                       start_new_session=True, env=environment)
         deadline = time.monotonic() + 15
         while True:
             if self.server.poll() is not None:
@@ -138,6 +144,8 @@ read only = yes
         if self.server and self.server.poll() is None:
             os.killpg(self.server.pid, signal.SIGKILL)
             self.server.wait(timeout=10)
+        if self.server and self.server.stdin:
+            self.server.stdin.close()
 
     def close(self):
         self.resume()
