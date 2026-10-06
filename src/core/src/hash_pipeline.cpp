@@ -229,10 +229,12 @@ public:
     HashOutput run()
     {
         std::vector<std::jthread> workers;
+        auto const cancellation = std::make_exception_ptr(CoreError(ErrorCode::Cancelled, "Hashing was cancelled"));
+        std::stop_callback on_stop(stop_, [this, cancellation] { queue_->fail(cancellation); });
         workers.reserve(static_cast<std::size_t>(threads_));
-        for (int i = 0; i < threads_; ++i) workers.emplace_back([this] { work(); });
-
         try {
+            // A thread-start failure must also wake and join already started workers.
+            for (int i = 0; i < threads_; ++i) workers.emplace_back([this] { work(); });
             current_.data = queue_->acquire();
             report();
             for (std::size_t i = 0; i < job_.files.size(); ++i) {
@@ -317,6 +319,7 @@ private:
     void append_zeros(std::size_t index, std::uint64_t n, bool real)
     {
         while (n > 0) {
+            check_stop();
             begin_bytes(index, real);
             auto const take = static_cast<std::size_t>(std::min<std::uint64_t>(n, unit_target_ - current_.size));
             std::memset(current_.data.get() + current_.size, 0, take);
@@ -338,6 +341,9 @@ private:
     // Records a problem under the Record policy; rethrows under Strict.
     void problem(std::size_t index, FileStatus status, std::string message, CoreError const* cause)
     {
+        // Verification must never convert a cancellation into an unreadable
+        // row and synthesize the rest of a large file.
+        if (cause != nullptr && cause->code() == ErrorCode::Cancelled) throw *cause;
         if (job_.policy == ReadPolicy::Strict) {
             if (cause != nullptr) {
                 CoreError e = *cause;
@@ -368,7 +374,7 @@ private:
 
         std::unique_ptr<PayloadReader> reader;
         try {
-            reader = source_.open(*f.source);
+            reader = source_.open(*f.source, stop_);
         } catch (CoreError const& e) {
             FileStatus const s = e.code() == ErrorCode::SourceMissing ? FileStatus::Missing : FileStatus::Unreadable;
             problem(index, s, e.what(), &e);
@@ -397,7 +403,7 @@ private:
             out_.metrics.max_read_request_bytes = std::max(out_.metrics.max_read_request_bytes, want);
             std::size_t n = 0;
             try {
-                n = reader->read(std::span<std::byte>(current_.data.get() + current_.size, want));
+                n = reader->read(std::span<std::byte>(current_.data.get() + current_.size, want), stop_);
             } catch (CoreError const& e) {
                 problem(index, FileStatus::Unreadable, e.what(), &e);
                 append_zeros(index, remaining, true);
@@ -416,11 +422,12 @@ private:
             report();
         }
 
+        check_stop();
         // The file must end exactly at the expected length.
         std::array<std::byte, 1> probe{};
         std::size_t extra = 0;
         try {
-            extra = reader->read(probe);
+            extra = reader->read(probe, stop_);
         } catch (CoreError const& e) {
             problem(index, FileStatus::Unreadable, e.what(), &e);
             return;
@@ -455,10 +462,15 @@ private:
 
     void process(Unit const& u)
     {
+        auto stop_check = [this] {
+            if (stop_.stop_requested()) throw CoreError(ErrorCode::Cancelled, "Hashing was cancelled");
+        };
+        stop_check();
         std::byte const* const data = u.data.get();
         if (job_.v1) {
             std::uint64_t piece = u.v1_first_piece;
             for (std::size_t off = 0; off < u.size; off += static_cast<std::size_t>(piece_), ++piece) {
+                stop_check();
                 std::size_t const n = std::min<std::size_t>(static_cast<std::size_t>(piece_), u.size - off);
                 out_.v1_pieces[static_cast<std::size_t>(piece)] = sha1_of(data + off, n);
             }
@@ -473,6 +485,7 @@ private:
             std::vector<Sha256Digest> leaves;
             for (std::size_t off = 0; off < u.v2_bytes; off += static_cast<std::size_t>(piece_), ++piece) {
                 std::size_t const end = std::min<std::size_t>(u.v2_bytes, off + static_cast<std::size_t>(piece_));
+                stop_check();
                 leaves.clear();
                 for (std::size_t b = off; b < end; b += block_size)
                     leaves.push_back(sha256_of(data + b, std::min<std::size_t>(block_size, end - b)));

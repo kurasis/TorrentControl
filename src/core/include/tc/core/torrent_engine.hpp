@@ -8,7 +8,7 @@
 //  - source files may live anywhere (virtual-to-physical mapping),
 //  - each real payload byte is read exactly once, even for hybrid torrents,
 //  - padding is synthesized in memory and never read from or written to disk,
-//  - cancellation is a cooperative request checked between bounded reads.
+//  - cancellation is passed through bounded reads and wakes queued hash work.
 // No libtorrent session is created; hashing performs no network activity.
 
 #include "tc/core/manifest.hpp"
