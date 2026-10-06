@@ -50,6 +50,16 @@ older page replies. Off-page terminal events still resolve completion watches.
 Latest falls back to the final row when the native byte budget shortens its
 50-row window, keeping the newest job reachable without loading all history.
 
+Repeated replacement of the same torrent in the Windows session also exposed
+`MoveFileExW` failing with `ERROR_ACCESS_DENIED` during commit. Atomic rename
+now retries access, sharing and lock violations up to ten times, with 50 ms
+between attempts (at most 500 ms added wait, excluding OS-call time). It keeps
+the same overwrite flags and never deletes the previous output to bypass a
+lock. Persistent denial still fails and removes the owned temporary output.
+Windows controls use real file handles without `FILE_SHARE_DELETE` to verify
+temporary and persistent target locks, a temporary source lock, and a competing
+output created during retry. The previous file and no-overwrite rule survive.
+
 ## Checks and evidence
 
 Each cycle checks 1000 successful states and the expected kind mix, zero
