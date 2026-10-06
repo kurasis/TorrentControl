@@ -59,8 +59,11 @@ try {
     if (-not $device) { throw 'Exactly one new TAP device was not discovered' }
     $name = 'tc-smb-' + [guid]::NewGuid().ToString('N').Substring(0,8)
     Rename-NetAdapter -InputObject $device -NewName $name
-    Set-NetIPInterface -InterfaceIndex $device.InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled
-    New-NetIPAddress -InterfaceIndex $device.InterfaceIndex -IPAddress '192.168.240.1' -PrefixLength 30 | Out-Null
+    # This disposable address belongs only to the active network stack. The
+    # default New-NetIPAddress persistent store can still have DHCP enabled
+    # while the active store has already disabled it on a new TAP device.
+    Set-NetIPInterface -InterfaceIndex $device.InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled -PolicyStore ActiveStore
+    New-NetIPAddress -InterfaceIndex $device.InterfaceIndex -IPAddress '192.168.240.1' -PrefixLength 30 -PolicyStore ActiveStore | Out-Null
     $pnp = Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.GUID -eq ([guid]$device.InterfaceGuid).ToString('B') }
     if (-not $pnp -or -not $pnp.PNPDeviceID) { throw 'The owned TAP device has no PnP identity' }
     $config = @{
