@@ -38,6 +38,11 @@ public:
     using Dictionary = std::vector<DictEntry>;
 
     Value();
+    ~Value();
+    Value(Value const&);
+    Value(Value&&) noexcept;
+    Value& operator=(Value const&);
+    Value& operator=(Value&&) noexcept;
 
     static Value integer(std::int64_t v);
     // `decimal` must be canonical bencode integer text ("0", "-5", "123...").
@@ -45,7 +50,8 @@ public:
     static Value string(std::string bytes);
     static Value list(List items = {});
     // Sorts entries by raw key bytes; throws on duplicate keys.
-    static Value dictionary(Dictionary entries = {});
+    static Value dictionary();
+    static Value dictionary(Dictionary entries);
 
     Type type() const noexcept { return type_; }
     bool is_integer() const noexcept { return type_ == Type::Integer; }

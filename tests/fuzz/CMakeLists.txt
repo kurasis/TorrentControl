@@ -1,0 +1,6 @@
+foreach(name IN ITEMS metainfo tagged_json)
+    add_executable(tc-fuzz-${name} ${name}_fuzz.cpp)
+    target_link_libraries(tc-fuzz-${name} PRIVATE TorrentControl::bridge)
+    target_link_options(tc-fuzz-${name} PRIVATE -fsanitize=fuzzer)
+    tc_set_warnings(tc-fuzz-${name})
+endforeach()

@@ -13,6 +13,24 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(TC_BUILD_TESTS "Build unit and integration tests" ON)
 option(TC_BUILD_TOOLS "Build developer tools (tc-proof)" ON)
 option(TC_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+option(TC_ENABLE_SANITIZERS "Instrument native project code with ASan and UBSan" OFF)
+option(TC_BUILD_FUZZERS "Build Clang libFuzzer developer targets" OFF)
+
+if(TC_ENABLE_SANITIZERS)
+    if(WIN32 OR NOT CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$")
+        message(FATAL_ERROR "TC_ENABLE_SANITIZERS requires a Linux/Unix GCC or Clang toolchain")
+    endif()
+    add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined -fno-sanitize-recover=all)
+endif()
+if(TC_BUILD_FUZZERS)
+    if(NOT TC_ENABLE_SANITIZERS OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        message(FATAL_ERROR "TC_BUILD_FUZZERS requires Clang and TC_ENABLE_SANITIZERS")
+    endif()
+    # Instrument project libraries as well as each driver, without supplying
+    # the fuzzer main to ordinary tests/tools.
+    add_compile_options(-fsanitize=fuzzer-no-link)
+endif()
 
 # The Win32/WebView2 host is only meaningful on Windows. Everything else
 # (core engine, bridge protocol, tools, tests) is platform independent so it
@@ -58,4 +76,8 @@ endif()
 if(TC_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(TC_BUILD_FUZZERS)
+    add_subdirectory(tests/fuzz)
 endif()

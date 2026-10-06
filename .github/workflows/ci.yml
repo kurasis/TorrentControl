@@ -220,6 +220,41 @@ jobs:
       - name: Independent v1 and v2 hash audit (BiglyBT)
         run: python3 tests/integration/biglybt_compatibility.py --proof build/linux-release/tools/tc-proof/tc-proof --jar build/biglybt/BiglyBT.jar --report build/performance/biglybt-hash-audit.json
 
+      - name: Install Clang 18 and sanitizer runtimes
+        run: sudo apt-get update && sudo apt-get install -y clang-18 llvm-18 libclang-rt-18-dev
+
+      - name: Configure instrumented project code with prebuilt dependencies
+        env:
+          CXX: clang++-18
+          TC_DEPS_PREFIX: ${{ github.workspace }}/build/linux-release/vcpkg_installed/x64-linux
+        run: cmake --preset linux-fuzz
+
+      - name: Build sanitizer tests and libFuzzer targets
+        run: cmake --build --preset linux-fuzz --parallel 4
+
+      - name: Native tests under ASan and UBSan
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          mkdir -p build/fuzz-evidence
+          ctest --preset linux-fuzz --parallel 4 --output-junit "$GITHUB_WORKSPACE/build/fuzz-evidence/ctest.xml"
+
+      - name: Fuzz smoke campaigns (runs=3)
+        run: |
+          python3 tests/fuzz/seed_corpus.py --proof build/linux-fuzz/tools/tc-proof/tc-proof --output build/fuzz-seeds
+          python3 tests/fuzz/run_campaign.py --build build/linux-fuzz --corpus build/fuzz-seeds --output build/fuzz-evidence/campaign --runs 3
+
+      - name: Upload sanitizer and fuzz evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-fuzz-sanitizer-evidence
+          path: |
+            build/fuzz-evidence/
+            build/linux-fuzz/Testing/Temporary/
+          if-no-files-found: warn
+
       - name: Upload performance and client evidence
         if: always()
         uses: actions/upload-artifact@v4

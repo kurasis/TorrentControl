@@ -160,6 +160,15 @@ private:
 };
 
 Value::Value() = default;
+// DictEntry is complete here. Clang eagerly instantiates vector special members
+// at default arguments in Value's declaration when these remain implicit.
+Value::~Value() = default;
+Value::Value(Value const&) = default;
+Value::Value(Value&&) noexcept = default;
+Value& Value::operator=(Value const&) = default;
+Value& Value::operator=(Value&&) noexcept = default;
+
+Value Value::dictionary() { return dictionary({}); }
 
 Value Value::integer(std::int64_t v)
 {

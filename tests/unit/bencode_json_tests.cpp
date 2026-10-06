@@ -75,3 +75,22 @@ TEST_CASE("malformed tagged values are rejected", "[bridge][E02][U01]")
                         {{"key", {{"t", "str"}, {"utf8", "a"}}}, {"value", {{"t", "int"}, {"v", "2"}}}}})}};
     CHECK_THROWS_AS(bridge::bencode_from_json(dup), core::CoreError);
 }
+
+TEST_CASE("nonboolean truncation flags return a domain validation error", "[bridge][E02][fuzz]")
+{
+    using nlohmann::json;
+    for (auto const& flag : json::array({"wrong", 1, nullptr, json::array(), json::object()})) {
+        json const scalar = {{"t", "int"}, {"v", "1"}, {"truncated", flag}};
+        json const key = {{"t", "str"}, {"utf8", "a"}, {"truncated", flag}};
+        json const dictionary = {{"t", "dict"}, {"entries", json::array({
+            {{"key", key}, {"value", {{"t", "int"}, {"v", "1"}}}}})}};
+        for (auto const& value : {scalar, dictionary}) {
+            try {
+                (void)bridge::bencode_from_json(value);
+                FAIL("malformed truncation flag was accepted");
+            } catch (core::CoreError const& error) {
+                CHECK(error.code() == core::ErrorCode::InvalidArgument);
+            }
+        }
+    }
+}
