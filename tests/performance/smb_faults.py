@@ -144,6 +144,8 @@ read only = yes
         while True:
             try:
                 assert (self.mount / 'payload.bin').stat().st_size == 64 * 1024 * 1024
+                with (self.mount / 'payload.bin').open('rb') as source:
+                    assert source.read(1) == b'\x00'
                 return (time.monotonic() - started) * 1000
             except OSError as error:
                 if time.monotonic() - started >= timeout:
