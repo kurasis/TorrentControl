@@ -36,6 +36,9 @@ inline constexpr std::string_view app_origin = "https://torrentcontrol.example";
 // host, followed by a path). Used to reject messages from any other frame.
 bool is_allowed_source(std::string_view source_uri, std::string_view origin = app_origin);
 
+// Correlated refusal without running a handler (for a saturated host queue).
+std::string reject_request(std::string_view message, std::string code, std::string reason, bool retryable = false);
+
 class BridgeError : public std::runtime_error {
 public:
     BridgeError(std::string code, std::string message, bool retryable = false)

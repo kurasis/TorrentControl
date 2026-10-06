@@ -92,8 +92,12 @@ python3 tests/integration/client_compatibility.py \
 
 ## Remaining work before closing this stage
 
-1. Move first expensive preflight/filter/import work outside the native UI
-   thread and measure actual WebView2 interaction/heartbeat during it.
+The [native bridge responsiveness package](async-native-bridge.md) moves
+command handling off the Windows UI thread and adds a real WebView2/Win32
+heartbeat gate over 100,000 files. It does not remove service mutex contention
+or make running filesystem calls cancellable.
+
+1. Complete outgoing bridge bounds for large verification/job/import data.
 2. Measure creation peak memory and I/O on large trees and stalled/UNC sources.
    Existing instrumented hybrid tests prove one payload read pass on their
    local fixtures, not stalled Windows I/O cancellation.
@@ -101,5 +105,4 @@ python3 tests/integration/client_compatibility.py \
    cross-check with a mature independent v2 client such as BiglyBT and verify
    both hybrid hash families independently. Preserve every existing raw-info
    and canonical-layout guarantee while investigating.
-4. Complete outgoing bridge bounds for large verification/job/import data and
-   fuzz/sanitizer runs. Distribution/clean-machine release gates remain M4.
+4. Complete fuzz/sanitizer runs. Distribution/clean-machine release gates remain M4.

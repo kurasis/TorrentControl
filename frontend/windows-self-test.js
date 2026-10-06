@@ -61,6 +61,30 @@ export async function runNativeFlow(actions, state, info) {
   }
 
   const evidence = await runSelfTest(actions, state, info);
+  if (native.performanceFixture) {
+    let frames = 0, maxGap = 0, last = performance.now(), stopped = false;
+    const heartbeat = (now) => {
+      if (stopped) return;
+      maxGap = Math.max(maxGap, now - last);
+      last = now;
+      frames++;
+      requestAnimationFrame(heartbeat);
+    };
+    requestAnimationFrame(heartbeat);
+    let measurement;
+    try {
+      measurement = await request("runSelfTestResponsiveness");
+    } finally {
+      stopped = true;
+    }
+    check(measurement.files === 100000 && measurement.canCreate && measurement.filteredFiles === 1000,
+      "Native responsiveness test did not process the complete real fixture");
+    check(frames >= 2 && maxGap < 1000 && measurement.nativeTicks >= 2 && measurement.nativeMaxGapMs < 1000,
+      `UI heartbeat stalled: ${JSON.stringify({ frames, maxGap, ...measurement })}`);
+    evidence.responsiveness = { webViewFrames: frames, webViewMaxGapMs: maxGap, ...measurement };
+    evidence.nativeResponsiveness = true;
+    await actions.reloadSnapshot();
+  }
   await actions.newDraft();
   const revision = state.draft.revision;
   await request("selfTestStep", { name: "cancel" });

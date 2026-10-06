@@ -1,6 +1,7 @@
 param(
     [string]$Executable = "build/windows-x64-release/src/app/windows/TorrentControl.exe",
-    [string]$EvidenceDirectory = "build/windows-native-evidence"
+    [string]$EvidenceDirectory = "build/windows-native-evidence",
+    [string]$PerformanceRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,9 @@ $data = Join-Path $evidence ("data-" + [guid]::NewGuid().ToString("N"))
 function Invoke-SelfTest([string]$switch, [string]$log, [int]$expectedExit = 0) {
     $arguments = @($switch, "`"$log`"", "--self-test-data", "`"$data`"")
     if ($switch -eq "--self-test-flow") { $arguments += @("--self-test-diagnostics-port", "$diagnosticsPort") }
+    if ($switch -eq "--self-test-flow" -and $PerformanceRoot) {
+        $arguments += @("--self-test-performance-root", "`"$((Resolve-Path $PerformanceRoot).Path)`"")
+    }
     $p = Start-Process -FilePath $exe -ArgumentList $arguments -PassThru
     if (-not $p.WaitForExit(180000)) {
         $p.Kill($true)
@@ -25,6 +29,9 @@ function Invoke-SelfTest([string]$switch, [string]$log, [int]$expectedExit = 0) 
         if ($pass.Count -ne 1) { throw "$switch did not write exactly one PASS result" }
         $result = $pass[0].Substring(5) | ConvertFrom-Json
         if (-not $result.ok) { throw "$switch did not confirm success" }
+        if ($switch -eq "--self-test-flow" -and $PerformanceRoot -and -not $result.nativeResponsiveness) {
+            throw "The native WebView2 responsiveness check did not run"
+        }
         $result | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 ($log + ".json")
     }
 }

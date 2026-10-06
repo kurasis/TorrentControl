@@ -43,6 +43,7 @@ HRESULT WindowsHostServices::show_dialog(IFileDialog* dialog)
 
 std::vector<std::filesystem::path> WindowsHostServices::pick_open(OpenKind kind)
 {
+    if (!ui_.is_owner_thread()) return ui_.invoke([this, kind] { return pick_open(kind); });
     std::vector<std::filesystem::path> result;
     wil::com_ptr<IFileOpenDialog> dialog;
     if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)))) return result;
@@ -99,6 +100,7 @@ std::vector<std::filesystem::path> WindowsHostServices::pick_open(OpenKind kind)
 std::optional<std::filesystem::path> WindowsHostServices::pick_save(
     SaveKind kind, std::string const& suggested_name, std::filesystem::path const& folder)
 {
+    if (!ui_.is_owner_thread()) return ui_.invoke([this, kind, suggested_name, folder] { return pick_save(kind, suggested_name, folder); });
     wil::com_ptr<IFileSaveDialog> dialog;
     if (FAILED(CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog))))
         return std::nullopt;
@@ -145,6 +147,7 @@ std::optional<std::filesystem::path> WindowsHostServices::pick_save(
 
 void WindowsHostServices::show_in_folder(std::filesystem::path const& file)
 {
+    if (!ui_.is_owner_thread()) return ui_.invoke([this, file] { show_in_folder(file); });
     PIDLIST_ABSOLUTE pidl = nullptr;
     if (SUCCEEDED(SHParseDisplayName(file.c_str(), nullptr, &pidl, 0, nullptr)) && pidl != nullptr) {
         SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
@@ -158,6 +161,7 @@ void WindowsHostServices::show_in_folder(std::filesystem::path const& file)
 
 bool WindowsHostServices::open_with_default_app(std::filesystem::path const& file)
 {
+    if (!ui_.is_owner_thread()) return ui_.invoke([this, file] { return open_with_default_app(file); });
     // The path is the "file" argument, not part of a command line, so it is
     // never parsed as parameters.
     SHELLEXECUTEINFOW info{sizeof(info)};
@@ -172,6 +176,7 @@ bool WindowsHostServices::open_with_default_app(std::filesystem::path const& fil
 
 bool WindowsHostServices::open_url(std::string const& url)
 {
+    if (!ui_.is_owner_thread()) return ui_.invoke([this, url] { return open_url(url); });
     // The bridge only passes http(s) URLs without control characters.
     std::wstring const wide = to_wide(url);
     auto const result = reinterpret_cast<INT_PTR>(ShellExecuteW(owner_, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL));

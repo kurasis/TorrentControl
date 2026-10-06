@@ -197,6 +197,9 @@ indices, пагинация verification и metadata, предел исходя�
    Python reference полезен, но совместимость с клиентами пока не доказана.
    Первые реальные native measurements, кеширование и ограничения второго
    клиента: [отчёт этапа](native-performance-compatibility.md).
+   Bridge перенесён с потока окна на последовательный worker; настоящий
+   WebView2 проверяет heartbeat на 100 000 файлах:
+   [отзывчивость native host](async-native-bridge.md).
 5. **M4: распространение.** Offline WebView2 prerequisite, Windows 10/11 clean
    machine tests без IDE/Python/vcpkg, установщик/удаление, license/SBOM/notices,
    signing и release artifacts. Выпускать после предыдущих acceptance gates.

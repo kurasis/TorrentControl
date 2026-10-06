@@ -33,7 +33,12 @@ std::string to_utf8(std::wstring_view wide)
 WebViewHost::WebViewHost(HWND window, Options options, bridge::Dispatcher const& dispatcher)
     : window_(window), options_(std::move(options)), dispatcher_(dispatcher)
 {
+    commands_ = std::make_unique<bridge::AsyncDispatcher>(dispatcher_, [window] {
+        PostMessageW(window, wm_bridge_request, 0, 0);
+    });
 }
+
+WebViewHost::~WebViewHost() { close(); }
 
 HRESULT WebViewHost::start()
 {
@@ -121,7 +126,7 @@ void WebViewHost::register_handlers()
                 if (!bridge::is_allowed_source(to_utf8(uri.get()))) args->put_Cancel(TRUE);
                 else {
                     ++page_generation_;
-                    pending_.clear();
+                    commands_->reset_generation(page_generation_);
                 }
                 return S_OK;
             })
@@ -183,8 +188,13 @@ void WebViewHost::register_handlers()
                         }
                     }
                 }
-                pending_.push_back(std::move(request));
-                PostMessageW(window_, wm_bridge_request, 0, 0);
+                if (!bridge::is_allowed_source(request.source)) {
+                    post_to_page(bridge::reject_request(request.message, "ORIGIN_REJECTED", "Message from an unexpected origin"));
+                } else if (request.message.size() > bridge::max_message_bytes) {
+                    post_to_page(bridge::reject_request(request.message, "MESSAGE_TOO_LARGE", "Message exceeds the 1 MiB limit"));
+                } else if (!commands_->submit(request.message, std::move(request.source), std::move(request.attached), request.page_generation)) {
+                    post_to_page(bridge::reject_request(request.message, "BRIDGE_BUSY", "The command queue is full; try again", true));
+                }
                 return S_OK;
             })
             .Get(),
@@ -202,7 +212,7 @@ void WebViewHost::register_handlers()
                 } else if (kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED
                     || kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE) {
                     ++page_generation_;
-                    pending_.clear();
+                    commands_->reset_generation(page_generation_);
                     if (options_.on_renderer_recovery) options_.on_renderer_recovery();
                     if (FAILED(sender->Reload())) fail(E_FAIL, L"The application page could not be recovered.");
                 }
@@ -214,20 +224,8 @@ void WebViewHost::register_handlers()
 
 void WebViewHost::process_requests()
 {
-    // A modal dialog inside a handler pumps messages; the outer call drains
-    // anything that arrives meanwhile, in order.
-    if (processing_) return;
-    processing_ = true;
-    while (!pending_.empty()) {
-        PendingRequest request = std::move(pending_.front());
-        pending_.pop_front();
-        std::string const response = dispatcher_.handle(request.message, request.source, request.attached);
-        // A native modal dialog can pump navigation/recovery callbacks while
-        // dispatching. Its response belongs to the old page, whose request IDs
-        // may already have been reused by the new page.
-        if (request.page_generation == page_generation_) post_to_page(response);
-    }
-    processing_ = false;
+    for (auto const& reply : commands_->take_replies())
+        if (reply.generation == page_generation_) post_to_page(reply.message);
 }
 
 void WebViewHost::post_to_page(std::string const& message)
@@ -258,10 +256,10 @@ HRESULT WebViewHost::crash_renderer_for_self_test()
 
 void WebViewHost::close()
 {
+    commands_->stop();
     if (controller_) controller_->Close();
     controller_.reset();
     webview_.reset();
-    pending_.clear();
     environment_.reset();
 }
 

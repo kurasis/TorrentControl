@@ -4,6 +4,7 @@ include(Catch)
 
 add_executable(tc_unit_tests
     unit/app_bridge_tests.cpp
+    unit/async_bridge_tests.cpp
     unit/bencode_json_tests.cpp
     unit/bencode_tests.cpp
     unit/bridge_tests.cpp

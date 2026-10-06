@@ -1,5 +1,6 @@
 """Generate a real tree and benchmark the native dispatcher. Opt-in, no mocks."""
 import argparse
+import contextlib
 import json
 from pathlib import Path
 import subprocess
@@ -10,12 +11,16 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--proof", type=Path, required=True)
 parser.add_argument("--files", type=int, default=100_000)
 parser.add_argument("--report", type=Path, required=True)
+parser.add_argument("--fixture-root", type=Path, help="Retain a new fixture directory for the native WebView2 test")
 args = parser.parse_args()
 if not 1 <= args.files <= 1_000_000:
     parser.error("--files must be between 1 and 1000000")
 
-with tempfile.TemporaryDirectory(prefix="tc-native-benchmark-") as directory:
-    root = Path(directory) / "Release"
+context = contextlib.nullcontext() if args.fixture_root else tempfile.TemporaryDirectory(prefix="tc-native-benchmark-")
+with context as directory:
+    root = args.fixture_root if args.fixture_root else Path(directory) / "Release"
+    if args.fixture_root:
+        root.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
     for i in range(args.files):
         folder = root / f"folder-{i // 1000:03d}"

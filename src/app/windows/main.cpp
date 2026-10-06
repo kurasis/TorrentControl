@@ -40,6 +40,8 @@ constexpr UINT_PTR self_test_timer = 1;
 constexpr UINT self_test_timeout_ms = 120'000;
 constexpr UINT wm_service_events = WM_APP + 2;
 constexpr UINT wm_self_test_crash = WM_APP + 3;
+constexpr UINT wm_ui_tasks = WM_APP + 4;
+constexpr UINT_PTR performance_timer = 3;
 
 // Events raised on service worker threads, handed to the UI thread.
 class EventQueue {
@@ -85,6 +87,7 @@ private:
 };
 
 struct AppState {
+    std::unique_ptr<tc::bridge::UiTasks> ui;
     // Destroyed in reverse order: the service (which joins its workers) goes
     // before the queue its event sink writes to.
     std::unique_ptr<EventQueue> events;
@@ -93,10 +96,13 @@ struct AppState {
     std::unique_ptr<tc::app::NativeSelfTest> native_test;
     int renderer_recoveries = 0;
     std::unique_ptr<tc::service::AppService> service;
-    std::unique_ptr<tc::app::WebViewHost> host;
     tc::bridge::Dispatcher dispatcher;
+    std::unique_ptr<tc::app::WebViewHost> host;
     std::optional<std::wstring> self_test_log;
     int exit_code = 0;
+    ULONGLONG performance_last_tick = 0;
+    ULONGLONG performance_max_gap = 0;
+    std::size_t performance_ticks = 0;
 };
 
 AppState* state_of(HWND hwnd)
@@ -196,6 +202,9 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
     case tc::app::wm_bridge_request:
         if (app && app->host) app->host->process_requests();
         return 0;
+    case wm_ui_tasks:
+        if (app && app->ui) app->ui->drain();
+        return 0;
     case wm_self_test_crash:
         if (app && app->native_test && app->host) {
             HRESULT const hr = app->host->crash_renderer_for_self_test();
@@ -224,6 +233,13 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
         DestroyWindow(hwnd);
         return 0;
     case WM_TIMER:
+        if (wparam == performance_timer && app) {
+            auto const now = GetTickCount64();
+            app->performance_max_gap = std::max(app->performance_max_gap, now - app->performance_last_tick);
+            app->performance_last_tick = now;
+            ++app->performance_ticks;
+            return 0;
+        }
         if (wparam == tc::app::NativeSelfTest::timer_id && app && app->native_test) {
             app->native_test->on_timer();
             return 0;
@@ -235,6 +251,7 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
         }
         return 0;
     case WM_DESTROY:
+        if (app && app->ui) app->ui->close();
         if (app && app->host) app->host->close();
         PostQuitMessage(app ? app->exit_code : 0);
         return 0;
@@ -253,6 +270,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     bool settings_test = false;
     int diagnostics_port = 0;
     std::optional<std::wstring> self_test_data;
+    std::optional<std::wstring> performance_root;
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i < argc; ++i) {
@@ -263,6 +281,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
             app.self_test_log = argv[++i];
         } else if (arg == L"--self-test-data" && i + 1 < argc) self_test_data = argv[++i];
         else if (arg == L"--self-test-diagnostics-port" && i + 1 < argc) diagnostics_port = _wtoi(argv[++i]);
+        else if (arg == L"--self-test-performance-root" && i + 1 < argc) performance_root = argv[++i];
     }
     LocalFree(argv);
     bool const self_test = app.self_test_log.has_value();
@@ -299,6 +318,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     HWND hwnd = CreateWindowExW(0, window_class, L"TorrentControl", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
         1100, 760, nullptr, nullptr, instance, &app);
     if (hwnd == nullptr) return 1;
+    app.ui = std::make_unique<tc::bridge::UiTasks>([hwnd] { return PostMessageW(hwnd, wm_ui_tasks, 0, 0) != FALSE; });
 
     // The service owns the draft, the job queue and the settings; the page
     // only mirrors it. Events cross to the UI thread through the queue.
@@ -319,14 +339,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     if (native_flow) {
         app.native_test = std::make_unique<tc::app::NativeSelfTest>(hwnd, std::filesystem::path(data_dir),
             [&app](std::string const& message) { write_self_test_log(app, message); });
-        app.shell = std::make_unique<tc::app::WindowsHostServices>(hwnd,
+        app.shell = std::make_unique<tc::app::WindowsHostServices>(hwnd, *app.ui,
             [&app](IFileDialog* dialog) { return app.native_test->show_dialog(dialog); });
-    } else app.shell = std::make_unique<tc::app::WindowsHostServices>(hwnd);
+    } else app.shell = std::make_unique<tc::app::WindowsHostServices>(hwnd, *app.ui);
     tc::bridge::register_app_operations(app.dispatcher, *app.service, *app.shell);
 
     if (self_test) {
         HWND const window = hwnd;
         AppState* const state = &app;
+        auto register_ui_operation = [state](std::string name, tc::bridge::Dispatcher::Handler handler) {
+            state->dispatcher.register_operation(std::move(name), [state, handler = std::move(handler)](nlohmann::json const& payload) {
+                return state->ui->invoke([&] { return handler(payload); });
+            });
+        };
         if (native_flow) {
             app.dispatcher.register_operation("prepareSelfTestDiagnostics", [state, diagnostics_port](nlohmann::json const&) {
                 if (diagnostics_port < 1 || diagnostics_port > 65535)
@@ -336,21 +361,53 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
                     {{"url", base + "/announce?token=fixture-secret"}, {"tier", 0}, {"enabled", true}}})},
                     {"webSeeds", nlohmann::json::array({base + "/seed/"})}}, std::nullopt);
             });
-            app.dispatcher.register_operation("selfTestStep", [state](nlohmann::json const& payload) {
+            register_ui_operation("selfTestStep", [state](nlohmann::json const& payload) {
                 write_self_test_log(*state, "STEP " + payload.value("name", ""));
                 return state->native_test->step(payload);
             });
-            app.dispatcher.register_operation("getSelfTestState", [state, settings_test](nlohmann::json const&) {
+            register_ui_operation("getSelfTestState", [state, settings_test, performance_root](nlohmann::json const&) {
                 return nlohmann::json{{"checkpoint", state->native_test->checkpoint},
-                    {"rendererRecoveries", state->renderer_recoveries}, {"settingsOnly", settings_test}};
+                    {"rendererRecoveries", state->renderer_recoveries}, {"settingsOnly", settings_test},
+                    {"performanceFixture", performance_root.has_value()}};
             });
-            app.dispatcher.register_operation("crashSelfTestRenderer", [state, window](nlohmann::json const& payload) {
+            register_ui_operation("crashSelfTestRenderer", [state, window](nlohmann::json const& payload) {
                 if (!state->native_test->checkpoint.is_null())
                     throw tc::bridge::BridgeError("SELF_TEST", "Renderer recovery already requested");
                 state->native_test->checkpoint = payload;
                 write_self_test_log(*state, "STEP renderer crash");
                 PostMessageW(window, wm_self_test_crash, 0, 0);
                 return nlohmann::json::object();
+            });
+            app.dispatcher.register_operation("runSelfTestResponsiveness", [state, window, performance_root](nlohmann::json const&) {
+                if (!performance_root) throw tc::bridge::BridgeError("SELF_TEST", "A native performance fixture is required");
+                state->ui->invoke([state, window] {
+                    state->performance_ticks = 0;
+                    state->performance_max_gap = 0;
+                    state->performance_last_tick = GetTickCount64();
+                    if (!SetTimer(window, performance_timer, 10, nullptr))
+                        throw tc::bridge::BridgeError("SELF_TEST", "Could not start the native UI heartbeat");
+                });
+                try {
+                    state->service->new_draft();
+                    state->service->add_sources({std::filesystem::path(*performance_root)});
+                    state->service->wait_for_scan();
+                    state->service->update_draft({{"trackers", nlohmann::json::array()}, {"format", "hybrid"}}, std::nullopt);
+                    auto const validation = state->service->validate_draft();
+                    auto const page = state->service->manifest_page(0, 200, "-099");
+                    auto const snapshot = state->service->snapshot();
+                    auto result = state->ui->invoke([state, window] {
+                        KillTimer(window, performance_timer);
+                        return nlohmann::json{{"nativeTicks", state->performance_ticks},
+                            {"nativeMaxGapMs", std::max(state->performance_max_gap, GetTickCount64() - state->performance_last_tick)}};
+                    });
+                    result["files"] = snapshot.at("scan").at("summary").at("realFiles");
+                    result["canCreate"] = validation.at("canCreate");
+                    result["filteredFiles"] = page.at("total");
+                    return result;
+                } catch (...) {
+                    state->ui->invoke([window] { KillTimer(window, performance_timer); });
+                    throw;
+                }
             });
             app.dispatcher.register_operation("checkSelfTestOutput", [state](nlohmann::json const&) {
                 auto const folder = state->native_test->root() / L"output";
@@ -386,7 +443,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
                     && profile.name == payload.value("name", ""); });
             return nlohmann::json{{"persisted", persisted}};
         });
-        app.dispatcher.register_operation("reportSelfTest", [window, state](nlohmann::json const& payload) {
+        register_ui_operation("reportSelfTest", [window, state](nlohmann::json const& payload) {
             bool const ok = payload.value("ok", false);
             write_self_test_log(*state, std::string(ok ? "PASS " : "FAIL ") + payload.dump());
             state->exit_code = ok ? 0 : 5;
