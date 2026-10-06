@@ -4,6 +4,7 @@
 import { has, t } from "./i18n.js";
 import { h, replace } from "./dom.js";
 import { exactBytes, formatBytes, formatDuration, percent, PIECE_SIZES } from "./format.js";
+import { collectionPane } from "./model-pages.js";
 import { VirtualList } from "./virtual-list.js";
 import { renderDiagnostics } from "./diagnostics.js";
 import { renderMetadataEditor } from "./metadata-editor.js";
@@ -96,25 +97,23 @@ function scanLine(state) {
 
 function renderSources(state, actions) {
   const sources = state.draft?.sources ?? [];
+  const revision = state.draft?.revision;
+  const renderRow = (source) => h("div", { class: state.selectedSource === source.id ? "selected collection-row" : "collection-row" },
+    h("span", { class: "kind" }, source.isDirectory ? t("folder") : t("file")),
+    h("button", { type: "button", class: "link path", title: source.path, onclick: () => actions.selectSource(source.id) }, source.name || source.path),
+    h("button", { type: "button", class: "icon", id: `remove-${source.id}`,
+      "aria-label": t("removeSource", { name: source.name || source.path }), onclick: () => actions.removeSource(source.id, revision) }, "×"));
+  const paged = state.draft?.pages?.sources;
   return card(t("sourcesHeading"),
     h("div", { class: "button-row" },
       h("button", { type: "button", id: "add-files", onclick: () => actions.selectSources("files") }, t("addFiles")),
       h("button", { type: "button", id: "add-folder", onclick: () => actions.selectSources("folder") }, t("addFolder")),
       h("span", { class: "hint drop-hint" }, t("dropHint"))),
-    sources.length === 0
+    paged?.total > sources.length ? collectionPane(t("sourcesHeading"),
+      (offset, limit) => actions.modelPage("draft", "sources", "", revision, offset, limit),
+      renderRow, { id: "source-list" }) : sources.length === 0
       ? h("p", { class: "empty" }, t("noSources"))
-      : h("ul", { class: "sources", id: "source-list" },
-        sources.map((s) => h("li", { class: state.selectedSource === s.id ? "selected" : "" },
-          h("span", { class: "kind" }, s.isDirectory ? t("folder") : t("file")),
-          h("button", { type: "button", class: "link path", title: s.path, onclick: () => actions.selectSource(s.id) }, s.name || s.path),
-          h("button", {
-            type: "button",
-            class: "icon",
-            id: `remove-${s.id}`,
-            "aria-label": t("removeSource", { name: s.name || s.path }),
-            title: t("remove"),
-            onclick: () => actions.removeSource(s.id),
-          }, "×")))),
+      : h("div", { class: "sources", id: "source-list" }, sources.map(renderRow)),
     scanLine(state));
 }
 
@@ -138,9 +137,10 @@ function renderOutput(state, actions) {
 function renderSimple(state, actions) {
   const d = state.draft;
   return card(null,
-    field("draft-name", t("nameLabel"), textInput("draft-name", "name", d.name, actions, { placeholder: d.effectiveName ?? "" })),
+    field("draft-name", t("nameLabel"), textInput("draft-name", "name", d.name, actions, { placeholder: d.effectiveName ?? "", disabled: !!d.textFields?.name })),
     field("draft-profile", t("profileLabel"),
-      select("draft-profile", d.profile, profileOptions(state), (v) => actions.pickProfile(v))),
+      h("div", { class: "button-row" }, select("draft-profile", d.profile, profileOptions(state), (v) => actions.pickProfile(v)),
+        state.profilesTotal > state.profiles.length ? h("button", { type: "button", id: "browse-profiles", onclick: () => actions.browseProfiles() }, t("allProfiles")) : null)),
     renderOutput(state, actions));
 }
 
@@ -221,34 +221,38 @@ function renderFilesTab(state, actions) {
     }).reset();
   }
 
-  const source = state.draft.sources.find((s) => s.id === state.selectedSource);
-  if (source) panel.append(renderSourceOptions(source, actions));
+  const source = state.selectedSourceData ?? state.draft.sources.find((s) => s.id === state.selectedSource);
+  if (source) panel.append(renderSourceOptions(source, actions, state.draft.revision,
+    state.sourceOptionsPending?.sourceId === source.id ? state.sourceOptionsPending.values : {}));
   return panel;
 }
 
-function renderSourceOptions(source, actions) {
+function renderSourceOptions(source, actions, revision, pending) {
   const options = {
-    recursive: source.recursive,
-    followLinks: source.followLinks,
-    skipCloud: source.skipCloud,
+    recursive: pending.recursive ?? source.recursive,
+    followLinks: pending.followLinks ?? source.followLinks,
+    skipCloud: pending.skipCloud ?? source.skipCloud,
   };
   const exclusions = h("textarea", { id: "source-exclusions", rows: "4", spellcheck: "false" });
-  exclusions.value = (source.exclusions ?? []).join("\n");
+  exclusions.value = pending.exclusionsText ?? (source.exclusions ?? []).join("\n");
+  exclusions.addEventListener("input", () => actions.stageSourceOption(source.id, "exclusionsText", exclusions.value));
   const set = (key) => (v) => {
     options[key] = v;
+    actions.stageSourceOption(source.id, key, v);
   };
   return card(t("sourceOptions", { name: source.name || source.path }),
-    source.isDirectory ? checkbox("source-recursive", t("recursive"), source.recursive, set("recursive")) : null,
-    source.isDirectory ? checkbox("source-follow", t("followLinks"), source.followLinks, set("followLinks")) : null,
-    checkbox("source-cloud", t("skipCloud"), source.skipCloud, set("skipCloud")),
-    source.isDirectory ? field("source-exclusions", t("exclusions"), exclusions) : null,
+    source.isDirectory ? checkbox("source-recursive", t("recursive"), options.recursive, set("recursive")) : null,
+    source.isDirectory ? checkbox("source-follow", t("followLinks"), options.followLinks, set("followLinks")) : null,
+    checkbox("source-cloud", t("skipCloud"), options.skipCloud, set("skipCloud")),
+    h("button", { type: "button", id: "source-full-path", onclick: () => actions.readModelText("source", "path", source.id, revision, t("colSource")) }, t("details")),
+    source.isDirectory ? source.exclusionsPaged ? editableRows("exclusions", source.id, revision, actions, t("exclusions")) : field("source-exclusions", t("exclusions"), exclusions) : null,
     h("button", {
       type: "button",
       id: "apply-source-options",
       onclick: () => actions.setSourceOptions(source.id, {
         ...options,
-        exclusions: exclusions.value.split("\n").map((s) => s.trim()).filter(Boolean),
-      }),
+        ...(source.exclusionsPaged ? {} : { exclusions: exclusions.value.split("\n").map((s) => s.trim()).filter(Boolean) }),
+      }, revision),
     }, t("applyOptions")));
 }
 
@@ -270,11 +274,12 @@ function renderGeneralTab(state, actions) {
     },
   });
   return h("div", {},
-    field("draft-name", t("nameLabel"), textInput("draft-name", "name", d.name, actions, { placeholder: d.effectiveName ?? "" })),
+    field("draft-name", t("nameLabel"), textInput("draft-name", "name", d.name, actions, { placeholder: d.effectiveName ?? "", disabled: !!d.textFields?.name })),
     h("div", { class: "field" },
       h("label", { for: "draft-profile" }, t("profileLabel")),
       h("div", { class: "button-row" },
         select("draft-profile", d.profile, profileOptions(state), (v) => actions.pickProfile(v)),
+        state.profilesTotal > state.profiles.length ? h("button", { type: "button", id: "browse-profiles", onclick: () => actions.browseProfiles() }, t("allProfiles")) : null,
         h("button", { type: "button", id: "save-profile", onclick: () => actions.saveProfile() }, t("saveAsProfile")),
         custom ? h("button", { type: "button", id: "export-profile", onclick: () => actions.exportProfile(custom.id) }, t("exportProfile")) : null,
         custom ? h("button", { type: "button", id: "delete-profile", class: "danger", onclick: () => actions.deleteProfile(custom.id) }, t("deleteProfile")) : null)),
@@ -296,6 +301,8 @@ function renderGeneralTab(state, actions) {
 }
 
 function renderTrackersTab(state, actions) {
+  if (state.draft.pages?.trackers.total > state.draft.trackers.length || state.draft.trackers.some((row) => row.displayTruncated))
+    return h("div", {}, editableRows("trackers", "", state.draft.revision, actions, t("tabTrackers")), renderDiagnostics(state, actions, "trackers"));
   const trackers = state.draft.trackers.map((tr) => ({ ...tr }));
   const commit = (immediate = true) => actions.edit("trackers", trackers.map((tr) => ({ ...tr })), { immediate });
   const move = (i, delta) => {
@@ -408,6 +415,8 @@ function resolvedSeed(url, state) {
 }
 
 function renderWebSeedsTab(state, actions) {
+  if (state.draft.pages?.webSeeds.total > state.draft.webSeeds.length)
+    return h("div", {}, editableRows("webSeeds", "", state.draft.revision, actions, t("tabWebSeeds")), renderDiagnostics(state, actions, "web-seeds"));
   const seeds = [...state.draft.webSeeds];
   const commit = (immediate = true) => actions.edit("webSeeds", [...seeds], { immediate });
   return h("div", {},
@@ -458,10 +467,18 @@ function renderMetadataTab(state, actions) {
     oninput: (e) => actions.edit("comment", e.target.value),
   });
   comment.value = d.comment ?? "";
+  comment.disabled = !!d.textFields?.comment;
   return h("div", {},
     field("draft-comment", t("commentLabel"), comment),
-    field("draft-creator", t("creatorLabel"), textInput("draft-creator", "creator", d.creator, actions)),
-    field("draft-source", t("sourceLabel"), textInput("draft-source", "source", d.source, actions)),
+    field("draft-creator", t("creatorLabel"), textInput("draft-creator", "creator", d.creator, actions, { disabled: !!d.textFields?.creator })),
+    field("draft-source", t("sourceLabel"), textInput("draft-source", "source", d.source, actions, { disabled: !!d.textFields?.source })),
+    ...Object.keys(d.textFields ?? {}).filter((key) => d.textFields[key] > 65536).map((key) => {
+      const canReplace = ["name", "comment", "creator", "source"].includes(key);
+      const replacement = h("input", { type: "text", maxlength: "4096", "aria-label": `${key}: ${t("replacementValue")}` });
+      return h("div", { class: "field" }, h("p", { class: "note" }, `${key}: ${t("previewOnly")}`),
+        h("button", { type: "button", onclick: () => actions.readModelText("draft", key, "", d.revision, key) }, t("details")),
+        canReplace ? replacement : null, canReplace ? h("button", { type: "button", onclick: () => actions.edit(key, replacement.value, { immediate: true }) }, t("replaceValue")) : null);
+    }),
     note("optionalFieldsLater"));
 }
 
@@ -478,6 +495,9 @@ function renderExpertTab(state, actions) {
       h("p", { class: "note" }, t("editorScopeHint")));
   }
   const files = h("div", { id: "torrent-files", class: "files" });
+  const labelFor = (key) => t(({ name: "nameLabel", path: "resultSaved", comment: "commentLabel",
+    createdBy: "creatorLabel", source: "sourceLabel", pieceLength: "pieceSizeLabel",
+    trackers: "field_trackers", webSeeds: "field_webSeeds", problems: "problems" })[key] ?? key);
   new VirtualList(files, {
     label: t("summaryFiles"),
     fetchPage: (offset, limit) => actions.torrentFilesPage(tor.id, offset, limit),
@@ -501,6 +521,10 @@ function renderExpertTab(state, actions) {
       kv(t("field_source"), tor.source),
       kv(t("field_trackers"), (tor.trackers ?? []).map((tr) => `[${tr.tier}] ${tr.url}`).join("\n"), { class: "pre" }),
       kv(t("field_webSeeds"), (tor.webSeeds ?? []).join("\n"), { class: "pre" })),
+    ...Object.keys(tor.textFields ?? {}).filter((key) => key !== "magnet").map((key) =>
+      h("button", { type: "button", id: `torrent-full-${key}`, onclick: () => actions.readModelText("torrent", key, tor.id, "", labelFor(key)) }, `${labelFor(key)}: ${t("details")}`)),
+    ...["trackers", "webSeeds", "problems"].filter((key) => (tor[`${key}Total`] ?? 0) > 0).map((key) =>
+      h("button", { type: "button", id: `torrent-all-${key}`, onclick: () => actions.browseCollection("torrent", key, tor.id, "", labelFor(key)) }, `${labelFor(key)}: ${t("allRows")} (${tor[`${key}Total`]})`)),
     h("h3", {}, t("identifiers")),
     h("dl", { class: "kv mono" },
       tor.infohashV1 ? kv("BTIH (v1)", tor.infohashV1) : null,
@@ -632,6 +656,10 @@ export function renderReview(container, state, actions) {
         h("ul", { class: "chips", id: "active-settings" }, v.review.map((item) =>
           h("li", {}, `${has(`field_${item.field}`) ? t(`field_${item.field}`) : item.field}: ${reviewValue(item)}`)))]
       : null,
+    ...["issues", "review"].filter((key) => (v?.[`${key}Total`] ?? 0) > 0).map((key) => {
+      const label = t(key === "issues" ? "problems" : "activeSettings");
+      return h("button", { type: "button", id: `review-all-${key}`, onclick: () => actions.browseCollection("review", key, "", v.draftRevision, label) }, `${label}: ${t("allRows")} (${v[`${key}Total`]})`);
+    }),
     issues.length
       ? h("ul", { class: "issues", id: "issues", "aria-live": "polite" }, issues.map((i) =>
         h("li", { class: i.severity === "error" ? "error" : "warning", dataset: { code: i.code } }, i.message)))
@@ -703,4 +731,36 @@ function renderJob(job, state, actions) {
           else if (state.settings.mode === "advanced") actions.setTab("jobs");
         },
       }, t("details"))));
+}
+
+function editableRows(key, owner, revision, actions, label) {
+  const pane = collectionPane(label, (offset, limit) => actions.modelPage("draft", key, owner, revision, offset, limit), (value, index) => {
+    const row = typeof value === "object" ? { ...value } : value;
+    if (row.displayTruncated && key === "trackers") {
+      const replacement = h("input", { type: "text", maxlength: "4096", id: `paged-replace-trackers-${index}`, "aria-label": t("replacementValue") });
+      return h("div", {}, h("p", { class: "note" }, t("previewOnly")),
+        h("input", { type: "text", disabled: true, value: row.url, id: `paged-trackers-${index}` }),
+        h("button", { type: "button", id: `paged-full-trackers-${index}`, onclick: () => actions.readModelText("draft", `/trackers/${index}/url`, "", revision, label) }, t("details")),
+        replacement, h("button", { type: "button", id: `paged-apply-trackers-${index}`, onclick: () => actions.editRow(key, owner, index, "set",
+          { url: replacement.value, tier: Math.min(999, Math.max(0, row.tier)), enabled: row.enabled }, revision) }, t("replaceValue")),
+        h("button", { type: "button", onclick: () => actions.editRow(key, owner, index, "remove", null, revision) }, t("remove")));
+    }
+    const input = h("input", { type: "text", id: `paged-${key}-${index}`, value: key === "trackers" ? row.url : row,
+      "aria-label": `${label} ${index + 1}`, spellcheck: "false", onchange: (event) => {
+        if (key === "trackers") row.url = event.target.value;
+        actions.editRow(key, owner, index, "set", key === "trackers" ? row : event.target.value, revision);
+      } });
+    return h("div", { class: "collection-row" }, input,
+      key === "trackers" ? h("input", { type: "number", id: `paged-tier-${index}`, value: row.tier, min: 0, max: 999,
+        "aria-label": t("colTier"), onchange: (event) => { row.tier = Number(event.target.value); actions.editRow(key, owner, index, "set", row, revision); } }) : null,
+      key === "trackers" ? h("input", { type: "checkbox", id: `paged-enabled-${index}`, checked: row.enabled,
+        "aria-label": t("colEnabled"), onchange: (event) => { row.enabled = event.target.checked; actions.editRow(key, owner, index, "set", row, revision); } }) : null,
+      h("button", { type: "button", id: `paged-remove-${key}-${index}`, onclick: () => actions.editRow(key, owner, index, "remove", null, revision) }, t("remove")),
+      key === "trackers" ? h("button", { type: "button", onclick: () => actions.editRow(key, owner, index, "up", null, revision) }, t("moveUp")) : null,
+      key === "trackers" ? h("button", { type: "button", onclick: () => actions.editRow(key, owner, index, "down", null, revision) }, t("moveDown")) : null);
+  }, { id: `paged-${key}` });
+  const value = h("input", { type: "text", id: `paged-add-${key}-value`, "aria-label": label });
+  return h("div", {}, pane, h("div", { class: "button-row" }, value,
+    h("button", { type: "button", id: `paged-add-${key}`, onclick: () => actions.editRow(key, owner, 0, "append",
+      key === "trackers" ? { url: value.value, tier: 0, enabled: true } : value.value, revision) }, t("addRow"))));
 }

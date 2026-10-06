@@ -69,12 +69,14 @@ json project_json(Draft const& d, int resolved_piece_length)
 
 void save_project(fs::path const& path, Draft const& d, int resolved_piece_length)
 {
-    write_file_atomic(path, project_json(d, resolved_piece_length).dump(2));
+    auto bytes = project_json(d, resolved_piece_length).dump(2);
+    if (bytes.size() > max_project_bytes) throw CoreError(ErrorCode::ResourceLimit, "Project exceeds the 64 MiB file limit");
+    write_file_atomic(path, bytes);
 }
 
 Draft load_project(fs::path const& path)
 {
-    json const j = json::parse(read_small_file(path), nullptr, false);
+    json const j = json::parse(read_small_file(path, max_project_bytes), nullptr, false);
     if (j.is_discarded() || !j.is_object() || j.value("format", "") != "torrentcontrol-project")
         throw CoreError(ErrorCode::UnsupportedFormat, "Not a TorrentControl project file");
     if (!j.contains("version") || !j.at("version").is_number_integer()
@@ -179,13 +181,15 @@ std::string unprotect_secret(std::string_view stored)
     throw CoreError(ErrorCode::InvalidArgument, "Unknown protected value format");
 }
 
-json to_json(AppSettings const& s)
+json to_json(AppSettings const& s, bool include_profiles)
 {
     json profiles = json::array();
-    for (auto const& p : s.custom_profiles) profiles.push_back(to_json(p));
-    return json{{"theme", s.theme}, {"language", s.language}, {"mode", s.mode}, {"lastProfile", s.last_profile},
+    if (include_profiles) for (auto const& p : s.custom_profiles) profiles.push_back(to_json(p));
+    json value{{"theme", s.theme}, {"language", s.language}, {"mode", s.mode}, {"lastProfile", s.last_profile},
         {"maxConcurrentJobs", s.max_concurrent_jobs}, {"openClientWithoutAsking", s.open_client_without_asking},
         {"customProfiles", std::move(profiles)}};
+    if (!include_profiles) value.erase("customProfiles");
+    return value;
 }
 
 void apply_settings_patch(AppSettings& s, json const& patch)
@@ -232,7 +236,9 @@ void save_settings(fs::path const& path, AppSettings const& s)
     std::error_code ec;
     if (!path.parent_path().empty()) fs::create_directories(path.parent_path(), ec);
     if (ec) throw CoreError(ErrorCode::OutputWriteFailed, "Cannot create the settings folder", ec.value());
-    write_file_atomic(path, j.dump(2));
+    auto bytes = j.dump(2);
+    if (bytes.size() > max_settings_bytes) throw CoreError(ErrorCode::ResourceLimit, "Settings exceed the 16 MiB file limit");
+    write_file_atomic(path, bytes);
 }
 
 AppSettings load_settings(fs::path const& path)
@@ -240,7 +246,7 @@ AppSettings load_settings(fs::path const& path)
     AppSettings s;
     std::error_code ec;
     if (!fs::exists(path, ec)) return s;
-    json j = json::parse(read_small_file(path), nullptr, false);
+    json j = json::parse(read_small_file(path, max_settings_bytes), nullptr, false);
     if (j.is_discarded() || !j.is_object()) return s; // a damaged file falls back to defaults
     json patch = j;
     patch.erase("customProfiles");

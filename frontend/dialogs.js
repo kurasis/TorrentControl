@@ -3,6 +3,7 @@
 import { has, t } from "./i18n.js";
 import { h, replace } from "./dom.js";
 import { exactBytes, formatBytes } from "./format.js";
+import { collectionPane, textPane } from "./model-pages.js";
 
 const dialog = () => document.getElementById("dialog");
 let onClose = null;
@@ -250,11 +251,11 @@ function describe(value) {
   return String(value);
 }
 
-export function showProfileChange(plan, apply, cancel) {
+export function showProfileChange(plan, apply, cancel, actions) {
   let applied = false;
   const changes = plan.changes ?? [];
   open(t("profileHeading", { name: plan.profile?.name ?? "" }),
-    changes.length === 0
+    [changes.length === 0
       ? h("p", {}, t("profileNoChanges"))
       : h("table", { class: "grid compact", id: "profile-changes" },
         h("tbody", {}, changes.map((c) => h("tr", { class: c.removesUserValue ? "removes" : "" },
@@ -263,6 +264,20 @@ export function showProfileChange(plan, apply, cancel) {
           h("td", { "aria-hidden": "true" }, "→"),
           h("td", {}, describe(c.after)),
           h("td", { class: "warning" }, c.removesUserValue ? t("profileRemovesUser") : ""))))),
+      ...changes.filter((change) => change.paged).map((change) => h("details", {},
+        h("summary", {}, `${change.field}: ${t("allRows")}`),
+        ...["before", "after"].map((side) => change[`${side}Total`] > 0 ?
+          collectionPane(`${change.field} ${side}`,
+            (offset, limit) => actions.modelPage("profilePlan", `${change.field}.${side}`, plan.profile.id, plan.draftRevision, offset, limit),
+            (row, index) => {
+              const detail = h("div", {});
+              const keys = typeof row === "object" ? Object.keys(row).filter((key) => typeof row[key] === "string") : [""];
+              return h("div", {}, h("pre", {}, describe([row])),
+                keys.map((key) => button(key || t("details"), () => replace(detail, textPane((offset) =>
+                  actions.modelText("profilePlan", `/${change.field}/${side}/${index}${key ? `/${key}` : ""}`, plan.profile.id, plan.draftRevision, offset))))), detail);
+            }, { id: `profile-${change.field}-${side}` }) : typeof change[side] === "string" ?
+          h("div", {}, h("h4", {}, side), textPane((offset) =>
+            actions.modelText("profilePlan", `/${change.field}/${side}`, plan.profile.id, plan.draftRevision, offset))) : null))) ],
     [
       button(t("close"), () => closeDialog(), { id: "profile-cancel" }),
       button(t("apply"), () => {
@@ -273,6 +288,25 @@ export function showProfileChange(plan, apply, cancel) {
     { closed: () => (applied ? apply() : cancel?.()) });
 }
 
+export function showCollection(label, fetchPage, details, choose) {
+  const pane = collectionPane(label, fetchPage, (row, index) => {
+    const content = typeof row === "object" ? row.name ?? JSON.stringify(row) : String(row);
+    const controls = [];
+    if (choose) controls.push(button(t("apply"), () => choose(row), { id: `model-choose-${index}` }));
+    if (details) {
+      for (const key of typeof row === "object" ? Object.keys(row).filter((key) => typeof row[key] === "string") : [""]) {
+        controls.push(button(key || t("details"), () => details(index, key ? `/${key}` : "")));
+      }
+    }
+    return h("div", { class: "collection-row" }, h("pre", {}, content), h("div", { class: "button-row" }, controls));
+  });
+  open(label, [details ? h("p", { class: "note" }, t("previewOnly")) : null, pane], [button(t("close"), closeDialog)], { wide: true });
+}
+
+export function showModelText(label, fetchPage) {
+  open(label, textPane(fetchPage), [button(t("close"), closeDialog)], { wide: true });
+}
+
 // ---- Batch ---------------------------------------------------------------------------------
 
 export function showBatch(actions) {
@@ -280,7 +314,7 @@ export function showBatch(actions) {
   const preview = h("div", { id: "batch-preview", "aria-live": "polite" });
   const start = button(t("batchStart", { count: 0 }), async () => {
     start.disabled = true;
-    const r = await actions.startBatch();
+    const r = await actions.startBatch(ui.plan?.revision);
     if (r?.jobIds) closeDialog();
     else start.disabled = false;
   }, { id: "batch-start", class: "primary", disabled: true });
@@ -288,11 +322,19 @@ export function showBatch(actions) {
   const show = (plan) => {
     if (!plan || plan.cancelled) return;
     ui.plan = plan;
-    const included = plan.items.filter((i) => i.included).length;
+    const included = plan.includedTotal ?? plan.items.filter((i) => i.included).length;
     start.textContent = t("batchStart", { count: included });
     start.disabled = included === 0;
     replace(preview,
       h("p", { class: "path" }, `${t("batchFolder")}: ${plan.outputDir}`),
+      plan.total > plan.items.length ? collectionPane(t("batchHeading"),
+        (offset, limit) => actions.modelPage("batch", "items", "", plan.revision, offset, limit),
+        (item) => h("div", { class: "collection-row" },
+          h("input", { type: "checkbox", id: `batch-include-${item.id}`, checked: item.included,
+            "aria-label": `${t("batchInclude")}: ${item.name}`, onchange: (e) => override(item.id, { included: e.target.checked }) }),
+          h("span", { class: "path" }, item.name), h("span", { class: "path", title: item.output }, item.output),
+          policySelect(`batch-policy-${item.id}`, item.policy, (value) => override(item.id, { policy: value })),
+          batchRoots(item, plan, actions)), { id: "batch-items" }) :
       h("table", { class: "grid compact", id: "batch-items" },
         h("thead", {}, h("tr", {},
           h("th", { scope: "col" }, t("batchInclude")),
@@ -310,17 +352,24 @@ export function showBatch(actions) {
           h("td", { class: "path" }, item.name),
           h("td", { class: "path", title: item.output },
             item.output.split(/[\\/]/).pop(),
+            batchRoots(item, plan, actions),
             item.existsOnDisk ? h("span", { class: "tag" }, t("batchExists")) : null,
             item.duplicateInBatch ? h("span", { class: "tag" }, t("batchDuplicate")) : null),
           h("td", {}, policySelect(`batch-policy-${item.id}`, item.policy, (v) => override(item.id, { policy: v }))))))),
+      plan.notesTotal > 0 ? collectionPane(t("batchHeading"),
+        (offset, limit) => actions.modelPage("batch", "notes", "", plan.revision, offset, limit),
+        (note, index) => {
+          const detail = h("div", {});
+          return h("div", {}, h("p", { class: "warning" }, note), button(t("details"), () => replace(detail,
+            textPane((offset) => actions.modelText("batch", `/notes/${index}`, "", plan.revision, offset)))), detail);
+        }, { id: "batch-notes" }) :
       plan.notes?.length ? h("ul", { class: "issues" }, plan.notes.map((n) => h("li", { class: "warning" }, n))) : null);
   };
 
   // The service re-resolves conflicts on every update, so all overrides are sent each time.
   const override = async (id, change) => {
-    ui.overrides[id] = { ...ui.overrides[id], ...change };
-    if (change.included === true) delete ui.overrides[id].included;
-    show(await actions.updateBatch(ui.overrides));
+    // Native state keeps all previous row overrides, including unloaded rows.
+    show(await actions.updateBatch({ [id]: change }, ui.plan.revision));
   };
   const plan = async (chooseFolder = false) => {
     ui.overrides = {};
@@ -341,6 +390,23 @@ export function showBatch(actions) {
     preview,
   ], [button(t("close"), () => closeDialog(), { id: "batch-close" }), start], { wide: true });
   plan();
+}
+
+function batchRoots(item, plan, actions) {
+  if (!item.sourceRootsTotal) return null;
+  const content = h("div", {});
+  const root = h("details", {}, h("summary", {}, t("batchSources", { count: item.sourceRootsTotal })), content);
+  root.addEventListener("toggle", () => {
+    if (!root.open || content.childNodes.length) return;
+    replace(content, collectionPane(t("sourcesHeading"),
+      (offset, limit) => actions.modelPage("batch", "sourceRoots", item.id, plan.revision, offset, limit),
+      (path, index) => {
+        const text = h("div", {});
+        return h("div", {}, h("span", { class: "path" }, path), button(t("details"), () => replace(text,
+          textPane((offset) => actions.modelText("batch", `/sourceRoots/${index}`, item.id, plan.revision, offset)))), text);
+      }, { id: `batch-sources-${item.id}` }));
+  });
+  return root;
 }
 
 function policySelect(id, value, onchange) {

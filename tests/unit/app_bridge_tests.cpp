@@ -198,7 +198,11 @@ TEST_CASE("profile export is redacted by default", "[bridge][app][U05]")
     Bridge b;
     json draft = b.ok("applyProfile", {{"profileId", "private"}})["draft"];
     b.ok("updateDraft", {{"patch", {{"trackers", json::array({{{"url", "https://p.example/announce?passkey=TOPSECRET"}}})}}}});
-    std::string const id = b.ok("saveProfile", {{"name", "Mine: <b>bold</b>"}})["profileId"];
+    auto saved = b.ok("saveProfile", {{"name", "Mine: <b>bold</b>"}});
+    std::string const id = saved["profileId"];
+    CHECK(saved["profilesTotal"] == 5);
+    CHECK(saved["profilesRevision"] == "1");
+    CHECK(saved["draft"]["profileMeta"]["id"] == id);
     CHECK(b.ok("listProfiles").dump().find("TOPSECRET") == std::string::npos);
 
     fs::path const out = b.dir.path() / "export.json";
@@ -207,6 +211,10 @@ TEST_CASE("profile export is redacted by default", "[bridge][app][U05]")
     CHECK(r["redacted"] == true);
     CHECK(b.host.save_names.back() == "Mine_ _b_bold__b_.tcprofile.json");
     CHECK(tc::test::read_all(out).find("TOPSECRET") == std::string::npos);
+    auto deleted = b.ok("deleteProfile", {{"profileId", id}});
+    CHECK(deleted["profilesTotal"] == 4);
+    CHECK(deleted["profilesRevision"] == "2");
+    CHECK(deleted["draft"]["profileMeta"].is_null());
 }
 
 TEST_CASE("an opened torrent is described and verified through the bridge", "[bridge][app]")
@@ -417,4 +425,26 @@ TEST_CASE("settings IO failures cross the bridge without committing a change", "
     fs::rename(backup, file);
     CHECK(b.ok("updateSettings", {{"patch", {{"theme", "dark"}}}})["theme"] == "dark");
     CHECK(service::load_settings(file).theme == "dark");
+}
+
+TEST_CASE("large draft collections cross the bridge as bounded pages and row mutations", "[bridge][paging]")
+{
+    Bridge b;
+    json rows = json::array();
+    for (int i = 0; i < 1000; ++i) rows.push_back({{"url", "https://tracker.example/" + std::string(1000, '\1') + std::to_string(i)}, {"tier", i % 999}, {"enabled", true}});
+    b.app->update_draft({{"trackers", rows}}, std::nullopt);
+    auto snapshot = b.ok("getSnapshot");
+    auto revision = snapshot["draft"]["revision"].get<std::string>();
+    CHECK(snapshot["draft"]["pages"]["trackers"]["total"] == 1000);
+    CHECK(snapshot.dump().size() < bridge::max_message_bytes);
+    auto page = b.ok("getModelPage", {{"model", "draft"}, {"key", "trackers"}, {"offset", 999u}, {"revision", revision}});
+    CHECK(page["items"][0]["url"] == rows.back()["url"]);
+    auto result = b.ok("editDraftRow", {{"key", "trackers"}, {"index", 999u}, {"action", "remove"}}, revision);
+    CHECK(result["draft"]["pages"]["trackers"]["total"] == 999);
+    auto rejected = b.call("editDraftRow", {{"key", "trackers"}, {"index", 0u}, {"action", "remove"}}, revision);
+    CHECK(rejected["error"]["code"] == "STALE_REVISION");
+    CHECK(b.app->draft_json()["pages"]["trackers"]["total"] == 999);
+    auto invalid = b.call("getModelPage", {{"model", "draft"}, {"key", "trackers"}, {"limit", 0u}, {"revision", result["draft"]["revision"]}});
+    CHECK(invalid["error"]["code"] == "INVALID_ARGUMENT");
+    CHECK(b.call("editDraftRow", {{"key", "trackers"}, {"action", "remove"}})["error"]["code"] == "INVALID_PAYLOAD");
 }

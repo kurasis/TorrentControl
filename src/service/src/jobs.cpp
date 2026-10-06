@@ -256,6 +256,12 @@ void JobScheduler::set_state(Job& job, JobState to, std::unique_lock<std::mutex>
     if (was_active && !now_active) job.active_before += Clock::now() - job.active_since;
     if (!was_active && now_active) job.active_since = Clock::now();
     job.snap.state = to;
+    if (!job.snap.batch_id.empty() && is_terminal(to)) {
+        auto& counts = batch_counts_[job.snap.batch_id];
+        if (to == JobState::Succeeded || to == JobState::SucceededWithWarnings) ++counts.done;
+        else if (to == JobState::Failed) ++counts.failed;
+        else if (to == JobState::Cancelled) ++counts.cancelled;
+    }
     if (to != JobState::Hashing) job.snap.eta_seconds.reset();
     log(job, std::string(to_string(to)));
     notify(job, lock);
@@ -278,6 +284,7 @@ std::string JobScheduler::enqueue_create(CreateJobSpec spec)
     std::string const id = ref.snap.id;
     jobs_.emplace(id, std::move(job));
     order_.push_back(id);
+    if (!ref.snap.batch_id.empty()) ++batch_counts_[ref.snap.batch_id].total;
     ++collection_revision_;
     log(ref, "Queued");
     notify(ref, lock);
@@ -626,6 +633,16 @@ std::optional<JobSnapshot> JobScheduler::find(std::string const& id) const
     auto it = jobs_.find(id);
     if (it == jobs_.end()) return std::nullopt;
     return it->second->snap;
+}
+
+json JobScheduler::batch_status(std::string const& id) const
+{
+    std::lock_guard lock(mutex_);
+    auto found = batch_counts_.find(id);
+    BatchCounts const counts = found == batch_counts_.end() ? BatchCounts{} : found->second;
+    auto const [total, done, failed, cancelled] = counts;
+    return {{"batchId", id}, {"total", total}, {"done", done}, {"failed", failed}, {"cancelled", cancelled},
+        {"finished", total > 0 && done + failed + cancelled == total}};
 }
 
 json JobScheduler::bridge_page(std::size_t offset, std::size_t limit) const

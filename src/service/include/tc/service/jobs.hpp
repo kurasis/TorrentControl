@@ -187,6 +187,7 @@ public:
     std::vector<JobSnapshot> snapshot() const;
     std::optional<JobSnapshot> find(std::string const& id) const;
     nlohmann::json bridge_page(std::size_t offset, std::size_t limit) const;
+    nlohmann::json batch_status(std::string const& id) const;
     nlohmann::json verification_page(std::string const& id, std::size_t offset, std::size_t limit, bool errors_only) const;
     nlohmann::json verification_file(std::string const& id, std::size_t index) const;
     nlohmann::json layout_page(std::string const& id, std::size_t offset, std::size_t limit) const;
@@ -216,6 +217,8 @@ private:
     std::condition_variable idle_;
     std::map<std::string, std::unique_ptr<Job>> jobs_;
     std::vector<std::string> order_;
+    struct BatchCounts { std::size_t total = 0, done = 0, failed = 0, cancelled = 0; };
+    std::map<std::string, BatchCounts> batch_counts_;
     std::uint64_t next_id_ = 1;
     std::uint64_t collection_revision_ = 0;
     int running_ = 0;

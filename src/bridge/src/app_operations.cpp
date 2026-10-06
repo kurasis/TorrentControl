@@ -122,6 +122,20 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
     using SK = HostServices::SaveKind;
 
     d.register_operation("getSnapshot", [&app](json const&) { return app.snapshot(); });
+    d.register_operation("getModelPage", [&app](json const& p) {
+        return app.model_page(str(p, "model", 16), str(p, "key", 256), str(p, "owner", 64, false),
+            count(p, "offset", 0, 100'000'000), count(p, "limit", 50, 50), str(p, "revision", 20, false));
+    });
+    d.register_operation("getModelText", [&app](json const& p) {
+        return app.model_text(str(p, "model", 16), str(p, "key", 256), str(p, "owner", 64, false),
+            count(p, "offset", 0, 100'000'000), str(p, "revision", 20, false));
+    });
+    d.register_request_operation("editDraftRow", [&app](R r) {
+        if (!r.draft_revision) throw BridgeError("INVALID_PAYLOAD", "draftRevision is required");
+        return json{{"draft", app.edit_draft_row(str(r.payload, "key", 16), str(r.payload, "owner", 64, false),
+            count(r.payload, "index", 0, 100'000'000), str(r.payload, "action", 16),
+            r.payload.value("value", json(nullptr)), r.draft_revision)}};
+    });
     d.register_operation("getDiagnosticTargets", [&app](json const& p) {
         return app.diagnostic_targets(str(p, "kind", 16), str(p, "torrentId", 64, false));
     });
@@ -196,10 +210,13 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
         }
         return app.plan_batch(str(p, "mode", 32), str(p, "policy", 16), folder);
     });
-    d.register_operation("updateBatch", [&app](json const& p) { return app.update_batch(object(p, "overrides")); });
-    d.register_operation("startBatch", [&app](json const&) { return json{{"jobIds", app.start_batch()}}; });
+    d.register_operation("updateBatch", [&app](json const& p) { return app.update_batch(object(p, "overrides"), str(p, "revision", 20)); });
+    d.register_operation("startBatch", [&app](json const& p) {
+        app.start_batch(str(p, "revision", 20)); return app.started_batch();
+    });
 
     // ---- Jobs --------------------------------------------------------------------
+    d.register_operation("getBatchStatus", [&app](json const& p) { return app.jobs().batch_status(str(p, "batchId", 64)); });
     d.register_operation("getJobsPage", [&app](json const& p) {
         return app.jobs().bridge_page(count(p, "offset", 0, 100'000'000), count(p, "limit", 50, 50));
     });
@@ -374,14 +391,17 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
     });
     d.register_operation("getSettings", [&app](json const&) { return app.settings_json(); });
     d.register_operation("updateSettings", [&app](json const& p) { return app.update_settings(object(p, "patch")); });
-    d.register_operation("listProfiles", [&app](json const&) { return json{{"profiles", app.profiles_json()}}; });
+    d.register_operation("listProfiles", [&app](json const&) { return app.profiles_state(); });
     d.register_operation("saveProfile", [&app](json const& p) {
         json const saved = app.save_custom_profile(str(p, "name", 200));
-        return json{{"profileId", saved["id"]}, {"profiles", app.profiles_json()}, {"draft", app.draft_json()}};
+        auto result = app.profiles_state();
+        result["profileId"] = saved["id"]; result["draft"] = app.draft_json();
+        return result;
     });
     d.register_operation("deleteProfile", [&app](json const& p) {
         app.delete_custom_profile(str(p, "profileId", 64));
-        return json{{"profiles", app.profiles_json()}};
+        auto result = app.profiles_state(); result["draft"] = app.draft_json();
+        return result;
     });
     d.register_operation("exportProfile", [&app, &host](json const& p) {
         json const exported = app.export_profile(str(p, "profileId", 64), flag(p, "includeSecrets"));

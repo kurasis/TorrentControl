@@ -445,6 +445,35 @@ TEST_CASE("batch plans per file and per child folder with conflict handling", "[
     CHECK(c->result->real_files == 1);
 }
 
+TEST_CASE("batch aggregate counts retain success failure and cancellation after clearing", "[service][batch][paging]")
+{
+    Harness h;
+    auto root = h.dataset("Batch status", 3, 32 * kib);
+    h.app->add_sources({root});
+    h.app->wait_for_scan();
+    auto out = h.dir.path() / "out";
+    fs::create_directory(out);
+    auto plan = h.app->plan_batch("perFile", "rename", out);
+    h.gate.close();
+    auto ids = h.app->start_batch(plan["revision"]);
+    REQUIRE(ids.size() == 3);
+    bool const hashing = h.events.wait_state(ids.front(), "Hashing");
+    if (!hashing) h.gate.release();
+    REQUIRE(hashing);
+    h.app->jobs().cancel(ids.back());
+    fs::remove(root / "f1.bin");
+    h.gate.release();
+    h.app->jobs().wait_idle();
+    auto report = h.app->jobs().batch_status("batch-1");
+    CHECK(report["total"] == 3);
+    CHECK(report["done"] == 1);
+    CHECK(report["failed"] == 1);
+    CHECK(report["cancelled"] == 1);
+    CHECK(report["finished"] == true);
+    h.app->jobs().clear_finished();
+    CHECK(h.app->jobs().batch_status("batch-1") == report);
+}
+
 TEST_CASE("one failed batch item does not affect the others", "[service][batch][U07]")
 {
     Harness h;

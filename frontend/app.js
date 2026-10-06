@@ -5,7 +5,7 @@ import { applyTranslations, setLocale, t } from "./i18n.js";
 import { isAvailable, onEvent, request, requestWithFiles } from "./bridge.js";
 import { debounce, toast } from "./dom.js";
 import { renderWorkspace, renderReview, renderJobs, workspaceKey } from "./views.js";
-import { showResult, showProfileChange, showBatch, showConfirm, showSaveProfile, showMagnetCopy, showVerifyFile, showJobText, showJobLayoutRow, closeDialog } from "./dialogs.js";
+import { showResult, showProfileChange, showBatch, showConfirm, showSaveProfile, showMagnetCopy, showVerifyFile, showJobText, showJobLayoutRow, showCollection, showModelText, closeDialog } from "./dialogs.js";
 import { loadMetadata } from "./metadata-editor.js";
 
 export const state = {
@@ -15,6 +15,11 @@ export const state = {
   jobs: new Map(),
   settings: { mode: "simple", theme: "system", language: "" },
   profiles: [],
+  profilesTotal: 0,
+  profilesRevision: "0",
+  profileBaseIds: new Set(),
+  selectedSourceData: null,
+  sourceOptionsPending: null,
   diagnosticPolicy: { networkMode: "direct", httpProxy: "", refresh: false, udpRetry: false },
   diagnosticRun: null,
   diagnosticPage: null,
@@ -120,9 +125,47 @@ async function guarded(promise) {
 function applyDraft(draft) {
   if (!draft) return;
   state.draft = draft;
+  includeSelectedProfile(draft.profileMeta);
+  hydrateDraftText(draft);
+  if (state.selectedSource) actions.selectSource(state.selectedSource);
   if (draft.scan) state.scan = { ...state.scan, ...draft.scan };
   invalidate();
   validateSoon();
+}
+
+function includeSelectedProfile(profile) {
+  if (!profile) return;
+  state.profiles = state.profiles.filter((item) => state.profileBaseIds.has(item.id));
+  if (!state.profiles.some((item) => item.id === profile.id)) state.profiles.push(profile);
+}
+
+function applyProfileList(result) {
+  state.profiles = result.profiles;
+  state.profileBaseIds = new Set(result.profiles.slice(0, 50).map((profile) => profile.id));
+  state.profilesTotal = result.profilesTotal ?? result.profiles.length;
+  state.profilesRevision = result.profilesRevision ?? "0";
+}
+
+async function hydrateDraftText(draft) {
+  for (const key of Object.keys(draft.textFields ?? {})) {
+    // Normal draft text is at most 64 KiB. Oversized legacy profile values
+    // remain readable in chunks and can be replaced explicitly in Metadata.
+    if (draft.textFields[key] > 65536) continue;
+    try {
+      let text = "", offset = 0;
+      do {
+        const page = await request("getModelText", { model: "draft", key, offset, revision: draft.revision });
+        if (state.draft !== draft) return;
+        text += page.text;
+        offset = page.nextOffset;
+      } while (offset !== null);
+      draft[key] = text;
+      delete draft.textFields[key];
+      // Invalidate even while the native draft revision stays the same.
+      lastWorkspaceKey = "";
+      invalidate("workspace", "review");
+    } catch (error) { if (error.code === "STALE_REVISION") return; }
+  }
 }
 
 const validateSoon = debounce(async () => {
@@ -206,13 +249,20 @@ export const actions = {
     const r = await guarded(requestWithFiles("addDroppedSources", Array.from(files)));
     if (r?.draft) applyDraft(r.draft);
   },
-  async removeSource(id) {
-    const r = await guarded(request("removeSource", { sourceId: id }, { draftRevision: state.draft.revision }));
-    if (r?.draft) applyDraft(r.draft);
+  async removeSource(id, revision = state.draft.revision) {
+    const r = await guarded(request("removeSource", { sourceId: id }, { draftRevision: revision }));
+    if (r?.draft) {
+      if (state.selectedSource === id) { state.selectedSource = null; state.selectedSourceData = null; }
+      applyDraft(r.draft);
+    }
   },
-  async setSourceOptions(id, options) {
-    const r = await guarded(request("setSourceOptions", { sourceId: id, options }, { draftRevision: state.draft.revision }));
-    if (r?.draft) applyDraft(r.draft);
+  async setSourceOptions(id, options, revision = state.draft.revision) {
+    const r = await guarded(request("setSourceOptions", { sourceId: id, options }, { draftRevision: revision }));
+    if (r?.draft) { state.sourceOptionsPending = null; applyDraft(r.draft); }
+  },
+  stageSourceOption(id, key, value) {
+    const values = state.sourceOptionsPending?.sourceId === id ? state.sourceOptionsPending.values : {};
+    state.sourceOptionsPending = { sourceId: id, values: { ...values, [key]: value } };
   },
   // Text fields are debounced; choices are sent at once.
   edit(field, value, { immediate = false } = {}) {
@@ -243,12 +293,13 @@ export const actions = {
     const apply = async () => {
       const r = await guarded(request("applyProfile", { profileId }, { draftRevision: plan.draftRevision }));
       if (r?.draft) {
+        includeSelectedProfile(plan.profile);
         applyDraft(r.draft);
         toast(t("profileApplied"), { action: t("undo"), onAction: () => actions.undo() });
       }
     };
     if (plan.changes.length <= 1) return apply(); // only the profile name changes
-    showProfileChange(plan, apply, () => invalidate("workspace"));
+    showProfileChange(plan, apply, () => invalidate("workspace"), actions);
   },
   async undo() {
     const r = await guarded(request("undoDraft"));
@@ -257,16 +308,17 @@ export const actions = {
   async saveProfile() {
     await sendPatch();
     showSaveProfile(async (name) => {
-      const r = await request("saveProfile", { name });
-      state.profiles = r.profiles;
-      applyDraft(r.draft);
+      const result = await request("saveProfile", { name });
+      applyProfileList(result);
+      applyDraft(result.draft);
     });
   },
   async deleteProfile(profileId) {
     const r = await guarded(request("deleteProfile", { profileId }));
     if (r) {
-      state.profiles = r.profiles;
-      invalidate();
+      applyProfileList(r);
+      if (r.draft) applyDraft(r.draft);
+      else invalidate();
     }
   },
   async exportProfile(profileId) {
@@ -284,12 +336,15 @@ export const actions = {
     await sendPatch();
     return guarded(request("planBatch", { mode, policy, chooseFolder }));
   },
-  updateBatch(overrides) {
-    return guarded(request("updateBatch", { overrides }));
+  updateBatch(overrides, revision) {
+    return guarded(request("updateBatch", { overrides, revision }));
   },
-  async startBatch() {
-    const r = await guarded(request("startBatch"));
-    if (r?.jobIds?.length) state.batchJobs.set(r.jobIds[0], r.jobIds);
+  async startBatch(revision) {
+    const r = await guarded(request("startBatch", { revision }));
+    if (r?.batchId) {
+      state.batchJobs.set(r.batchId, { batchId: r.batchId, total: r.total });
+      checkBatchSoon();
+    } else if (r?.jobIds?.length) state.batchJobs.set(r.jobIds[0], r.jobIds);
     return r;
   },
   openBatch() {
@@ -389,9 +444,36 @@ export const actions = {
     state.filter = filter;
     invalidate("workspace");
   },
-  selectSource(id) {
+  async selectSource(id) {
+    if (state.selectedSource !== id) state.sourceOptionsPending = null;
     state.selectedSource = id;
+    const revision = state.draft?.revision;
+    const local = state.draft?.sources.find((s) => s.id === id);
+    state.selectedSourceData = local ?? null;
+    if (!local && state.draft?.pages) {
+      const page = await guarded(request("getModelPage", { model: "draft", key: "source", owner: id, offset: 0, limit: 1, revision }));
+      if (state.selectedSource !== id || state.draft?.revision !== revision) return;
+      state.selectedSourceData = page?.items[0] ?? null;
+    }
+    lastWorkspaceKey = "";
     invalidate("workspace");
+  },
+  modelPage: (model, key, owner, revision, offset, limit = 50) => request("getModelPage", { model, key, owner, revision, offset, limit }),
+  modelText: (model, key, owner, revision, offset) => request("getModelText", { model, key, owner, revision, offset }),
+  async editRow(key, owner, index, action, value, revision) {
+    const result = await guarded(request("editDraftRow", { key, owner, index, action, value }, { draftRevision: revision }));
+    if (result) applyDraft(result.draft);
+  },
+  browseCollection(model, key, owner, revision, label) {
+    showCollection(label, (offset, limit) => actions.modelPage(model, key, owner, revision, offset, limit),
+      (index, path) => actions.readModelText(model, `/${key}/${index}${path}`, owner, revision, label));
+  },
+  readModelText(model, key, owner, revision, label) {
+    showModelText(label, (offset) => request("getModelText", { model, key, owner, revision, offset }));
+  },
+  browseProfiles() {
+    showCollection(t("profileLabel"), (offset, limit) => actions.modelPage("profiles", "items", "", state.profilesRevision, offset, limit),
+      null, (profile) => { closeDialog(); actions.pickProfile(profile.id); });
   },
   openLink: (url) => guarded(request("openExternalLink", { url })),
   // Paged reads for the virtualized lists; failures leave the page unloaded.
@@ -422,6 +504,19 @@ function isTerminal(s) {
   return s === "Succeeded" || s === "SucceededWithWarnings" || s === "Failed" || s === "Cancelled";
 }
 
+const checkBatchSoon = debounce(async () => {
+  for (const [id, batch] of state.batchJobs) {
+    if (Array.isArray(batch)) continue;
+    try {
+      const status = await request("getBatchStatus", { batchId: id });
+      if (status.finished && status.total === batch.total) {
+        state.batchJobs.delete(id);
+        toast(t("batchReport", { id, done: status.done, failed: status.failed, cancelled: status.cancelled }));
+      }
+    } catch { /* Later job events or a snapshot refresh retry the read. */ }
+  }
+}, 150);
+
 // ---- Events -----------------------------------------------------------------------
 
 function onJob(job) {
@@ -435,14 +530,18 @@ function onJob(job) {
     state.watchResult.delete(job.id);
     if (job.result) showResult(job, actions, state.settings);
   }
+  reportBatches();
+}
+
+function reportBatches() {
   for (const [first, ids] of state.batchJobs) {
-    if (!ids.includes(job.id)) continue;
+    if (!Array.isArray(ids)) { checkBatchSoon(); continue; }
     const jobs = ids.map((id) => state.jobs.get(id));
     if (jobs.every((j) => j && isTerminal(j.state))) {
       state.batchJobs.delete(first);
       const count = (pred) => jobs.filter(pred).length;
       toast(t("batchReport", {
-        id: job.batchId,
+        id: jobs[0].batchId,
         done: count((j) => j.state.startsWith("Succeeded")),
         failed: count((j) => j.state === "Failed"),
         cancelled: count((j) => j.state === "Cancelled"),
@@ -506,9 +605,11 @@ async function refresh() {
   }
   if (!snap) throw new Error("Jobs changed while refreshing; try again");
   state.draft = snap.draft;
+  hydrateDraftText(snap.draft);
   state.scan = snap.scan;
   state.settings = snap.settings;
-  state.profiles = snap.profiles;
+  applyProfileList(snap);
+  includeSelectedProfile(snap.draft.profileMeta);
   state.diagnosticRun = (snap.diagnostics ?? []).at(-1) ?? null;
   if (state.diagnosticRun) {
     state.diagnosticPolicy.networkMode = state.diagnosticRun.network;

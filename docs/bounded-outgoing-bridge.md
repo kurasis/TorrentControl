@@ -48,9 +48,9 @@ cursors and retains previous page boundaries, preserving access to complete
 binary keys up to its existing 4,096-byte edit limit.
 
 This package bounds transport and display data, not every native allocation.
-Native verification retains complete reports. Very large unpaged draft,
-profile, batch or torrent-overview objects can still receive a size error;
-the guard does not claim all those collections have paginated user flows.
+Native verification retains complete reports. The subsequent
+[model pagination package](model-pagination.md) supplies draft, profile, batch,
+review and torrent-overview pages and corresponding user flows.
 Creation peak memory, stalled Windows/UNC I/O, independent v2 client proof and
 fuzz/sanitizer gates remain open.
 

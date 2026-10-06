@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,10 @@ std::string read_small_file(std::filesystem::path const& path, std::size_t max_b
 // never part of the payload (the default exclusions skip *.tcproject).
 
 inline constexpr int project_format_version = 1;
+// Large source mappings need more room than ordinary settings; read and write
+// use the same cap so an oversized save never creates an unreadable project.
+inline constexpr std::size_t max_project_bytes = 64 * 1024 * 1024;
+inline constexpr std::size_t max_settings_bytes = 16 * 1024 * 1024;
 
 nlohmann::json project_json(Draft const& d, int resolved_piece_length);
 void save_project(std::filesystem::path const& path, Draft const& d, int resolved_piece_length);
@@ -52,7 +57,7 @@ struct AppSettings {
     std::vector<Profile> custom_profiles;
 };
 
-nlohmann::json to_json(AppSettings const& s);
+nlohmann::json to_json(AppSettings const& s, bool profiles = true);
 // Applies known keys; unknown keys are ignored. Throws CoreError on bad values.
 void apply_settings_patch(AppSettings& s, nlohmann::json const& patch);
 

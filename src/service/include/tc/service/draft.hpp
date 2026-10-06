@@ -84,7 +84,7 @@ std::string effective_name(Draft const& d);
 
 // JSON used by the bridge and by project files. Paths are UTF-8 strings.
 json to_json(SourceSpec const& s);
-json to_json(Draft const& d);
+json to_json(Draft const& d, bool collections = true);
 
 // Applies the editable fields present in `patch` (unknown keys are rejected).
 // Sources and the output path are not editable through a patch. Throws
