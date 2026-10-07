@@ -126,6 +126,15 @@ each rating; these are not unauthenticated remote-server vulnerabilities.
   matches the official GitHub release asset digest. Do not jump to major 7 as part
   of this focused change. Installation, repair, negative prerequisite controls
   and uninstall must pass on disposable Windows runners before merging.
+- The first disposable run exposed a validation defect in `CompatibleVersion`:
+  Inno's `ComparePackedVersion` compares signed `Int64` values. The negative
+  fixture minimum `65535.0.0.0` therefore appeared lower than the real Runtime,
+  so the prerequisite path was incorrectly skipped. Compare the four unpacked
+  unsigned 16-bit components instead. Keep the boundary fixture and all three
+  hash/vendor/post-install refusal checks; do not relax their expectations.
+  The shipped minimum `113.0.1774.30` is unchanged and was not affected by this
+  high-major fixture. This is a confirmed comparison/validation bug, not proof
+  of a SHA bypass for the shipped minimum.
 
 ## Remaining risks and recommendations
 
