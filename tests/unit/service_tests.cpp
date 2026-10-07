@@ -28,6 +28,43 @@ using namespace tc::service;
 using nlohmann::json;
 namespace fs = std::filesystem;
 
+TEST_CASE("settings reject out-of-range integers before narrowing", "[service][settings][audit]")
+{
+    AppSettings settings;
+    auto const before = to_json(settings);
+    for (auto text : {"0", "9", "-1", "4294967297", "4294967304", "-4294967295",
+             "18446744073709551615", "1.5", "\"2\"", "true", "null"}) {
+        INFO("maxConcurrentJobs " << text);
+        try {
+            apply_settings_patch(settings, {{"language", "ru"}, {"maxConcurrentJobs", json::parse(text)}});
+            FAIL_CHECK("Invalid concurrency was accepted");
+        } catch (core::CoreError const& e) {
+            CHECK(e.code() == core::ErrorCode::InvalidArgument);
+        }
+        CHECK(to_json(settings) == before);
+        settings = AppSettings{};
+    }
+    for (int jobs : {1, 8}) {
+        apply_settings_patch(settings, {{"maxConcurrentJobs", jobs}});
+        CHECK(settings.max_concurrent_jobs == jobs);
+    }
+}
+
+TEST_CASE("small-file reads report IO errors and preserve empty-file and size limits", "[service][storage][audit]")
+{
+    test::TempDir dir;
+    auto const empty = dir.path() / "empty.json";
+    test::write_bytes(empty, "");
+    CHECK(read_small_file(empty, 0).empty());
+    auto const file = dir.path() / "settings.json";
+    test::write_bytes(file, "{}");
+    CHECK(read_small_file(file, 2) == "{}");
+    CHECK_THROWS_AS(read_small_file(file, 1), core::CoreError);
+    CHECK_THROWS_AS(read_small_file(dir.path() / "missing.json"), core::CoreError);
+    // Some platforms open a directory successfully but fail on the first read.
+    CHECK_THROWS_AS(read_small_file(dir.path()), core::CoreError);
+}
+
 namespace {
 
 constexpr int kib = 1024;
