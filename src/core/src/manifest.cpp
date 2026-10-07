@@ -503,6 +503,8 @@ std::string to_utf8(fs::path const& p)
 
 fs::path path_from_utf8(std::string_view utf8)
 {
+    if (utf8.find('\0') != std::string_view::npos)
+        throw CoreError(ErrorCode::InvalidPath, "File paths cannot contain NUL characters");
     return fs::path(std::u8string(utf8.begin(), utf8.end()));
 }
 

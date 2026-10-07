@@ -32,6 +32,18 @@ using namespace tc::service;
 using nlohmann::json;
 namespace fs = std::filesystem;
 
+TEST_CASE("imported draft paths reject embedded NUL without rejecting ordinary Unicode", "[service][project][security]")
+{
+    std::string invalid = "payload.cmd";
+    invalid += '\0';
+    invalid += ".torrent";
+    CHECK_THROWS_AS(draft_from_json(json{{"output", invalid}}), core::CoreError);
+    CHECK_THROWS_AS(draft_from_json(json{{"sources", json::array({{{"id", "s1"}, {"path", invalid}}})}}), core::CoreError);
+    std::string const unicode = "Документы/音楽.torrent";
+    CHECK(core::to_utf8(draft_from_json(json{{"output", unicode}}).output) == unicode);
+    CHECK(draft_from_json(json{{"output", ""}}).output.empty());
+}
+
 TEST_CASE("settings reject out-of-range integers before narrowing", "[service][settings][audit]")
 {
     AppSettings settings;

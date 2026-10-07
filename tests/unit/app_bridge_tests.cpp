@@ -122,6 +122,26 @@ TEST_CASE("client launch refuses executable extensions even for valid metainfo",
     }
 }
 
+#ifndef _WIN32
+TEST_CASE("client launch rejects paths with a NUL hidden before the extension", "[bridge][app][security]")
+{
+    Bridge b;
+    auto const source = b.dir.path() / "payload.bin";
+    test::write_file(source, 1024);
+    auto const actual = b.dir.path() / "payload.cmd";
+    test::write_bytes(actual, test::make_torrent(source, core::TorrentFormat::V1, 16 * 1024));
+    // Native file APIs open actual; filesystem::path retains the suffix.
+    std::string disguised = actual.string();
+    disguised += '\0';
+    disguised += ".torrent";
+    auto const opened = b.app->open_torrent(fs::path(disguised));
+    auto const response = b.call("openInClient", {{"id", opened["id"]}});
+    CHECK(response["ok"] == false);
+    if (response["ok"] == false) CHECK(response["error"]["code"] == "UNSUPPORTED_FILE_TYPE");
+    CHECK(b.host.launched.empty());
+}
+#endif
+
 TEST_CASE("imported projects cannot restore prior write hydration or resource consent", "[bridge][app][security]")
 {
     Bridge b;

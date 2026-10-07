@@ -33,10 +33,17 @@ each rating; these are not unauthenticated remote-server vulnerabilities.
   reproduced using a fake host, not by executing commands. Windows scenario
   execution and any polyglot payload still require an isolated Windows check.
 - Minimal correction, approved: require case-insensitive `.torrent` in both the
-  bridge and native launch boundary. Viewing/editing files with other extensions
+  bridge and native launch boundary, and reject embedded NUL at both boundaries.
+  JSON-to-path conversion also rejects NUL, which is not a valid OS filename
+  character. Viewing/editing files with other extensions
   remains available; trying to launch one returns `UNSUPPORTED_FILE_TYPE`.
 - Test: six refused extensions and lower/uppercase `.torrent` through the real
-  dispatcher, without invoking Windows ShellExecute.
+  dispatcher, without invoking Windows ShellExecute. Two additional regressions
+  reproduced imported JSON accepting `payload.cmd\u0000.torrent` and the POSIX
+  bridge forwarding that disguised path to a fake host: native reads truncated
+  at NUL while `filesystem::path::extension()` retained `.torrent`. Both now
+  refuse the malformed path; ordinary Unicode and empty/unselected paths remain
+  supported. Actual Windows NUL/polyglot execution was not attempted.
 
 ### S02 — Imported projects restore destructive/costly consent (P1 / high)
 
@@ -229,13 +236,14 @@ inventory for end-user machines, or a full Windows OS/CRT vulnerability assessme
 
 ## Validation and outstanding isolated checks
 
-- Baseline before corrections: **176 CTest tests passed**. Five new targeted
-  cases reproduced the four original corrected code defects and the external
-  payload-link issue before their respective fixes. Dangerous association calls
+- Baseline before corrections: **176 CTest tests passed**. Seven new targeted
+  cases reproduced the four original corrected code defects, the external
+  payload-link issue and the two NUL-path boundaries before their respective
+  fixes. Dangerous association calls
   were observed through a fake host; all writes/reads used owned temporary data.
-- Local release build with warnings as errors and **181 CTest tests passed**,
-  including all five new regression cases. The security-tag subset passed
-  **96 assertions in 9 cases**. **182 ASan/UBSan CTest checks passed** with leak
+- Local release build with warnings as errors and **183 CTest tests passed**,
+  including all seven new regression cases. The security-tag subset passed
+  **103 assertions in 11 cases**. **184 ASan/UBSan CTest checks passed** with leak
   detection, including the sanitizer runtime controls. Native prebuilt libraries
   are not fully instrumented; project code and compiled inline code are checked.
   CI additionally executes Windows builds, ASan, native WebView2 flows,
