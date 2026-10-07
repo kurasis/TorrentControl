@@ -1,0 +1,2278 @@
+{
+  "scope": "Official qBittorrent GUI binary via Web API and unmodified BiglyBT Core/GlobalManager; Linux, original metainfo and natural save paths",
+  "clients": {
+    "BiglyBT.jar": {
+      "url": "https://github.com/BiglySoftware/BiglyBT/releases/download/v4.1.0.0/GitHub_BiglyBT.jar",
+      "sha256": "ff2a3d1cbcf8d9b816ffd022cde33db1c610fd38857f75a10148dc4a21e83572"
+    },
+    "qbittorrent-5.2.4_lt20_x86_64.AppImage": {
+      "url": "https://github.com/qbittorrent/qBittorrent/releases/download/release-5.2.4/qbittorrent-5.2.4_lt20_x86_64.AppImage",
+      "sha256": "eda6c0ca39f9befb0cd111b76a3d8b8bf3fd859323f2d4aac8c18f63766c2a1a"
+    }
+  },
+  "cases": [
+    {
+      "client": "BiglyBT",
+      "shape": "multifile",
+      "format": "v1",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "v1",
+        "infohash_v1": "783df9b756cdfebeb2bd8ed42fdcfc90c5279cd6",
+        "magnet": "magnet:?xt=urn:btih:783df9b756cdfebeb2bd8ed42fdcfc90c5279cd6&dn=Release",
+        "name": "Release"
+      },
+      "torrentSHA256": "0452b61a0c62735d41f8f515bbacf0e73f3b59bb75eed1d9e80e6d89dfb3a99e",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "completedPermille": 1000,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 1,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 65537,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 200001,
+              "padding": false
+            }
+          ]
+        },
+        "corrupt": {
+          "complete": false,
+          "completedPermille": 852,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 1,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 183618,
+              "padding": false
+            }
+          ]
+        },
+        "missing": {
+          "complete": false,
+          "completedPermille": 0,
+          "state": 100,
+          "error": "open fails for '/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin', File not found: /fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin (Read-only file system) (allocateFiles new:/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin)",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 1,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 183618,
+              "padding": false
+            }
+          ]
+        },
+        "restored": {
+          "complete": true,
+          "completedPermille": 1000,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 1,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 65537,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 200001,
+              "padding": false
+            }
+          ]
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "BiglyBT 4.1.0.0",
+        "infohashV1": "783df9b756cdfebeb2bd8ed42fdcfc90c5279cd6",
+        "infohashV2": null,
+        "files": [
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+            "length": 0,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+            "length": 1,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+            "length": 16383,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+            "length": 16384,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+            "length": 16385,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+            "length": 65535,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+            "length": 65536,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+            "length": 65537,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+            "length": 200001,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 9,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "qBittorrent",
+      "shape": "multifile",
+      "format": "v1",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "v1",
+        "infohash_v1": "783df9b756cdfebeb2bd8ed42fdcfc90c5279cd6",
+        "magnet": "magnet:?xt=urn:btih:783df9b756cdfebeb2bd8ed42fdcfc90c5279cd6&dn=Release",
+        "name": "Release"
+      },
+      "torrentSHA256": "0452b61a0c62735d41f8f515bbacf0e73f3b59bb75eed1d9e80e6d89dfb3a99e",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "corrupt": {
+          "complete": false,
+          "progress": 0.852979841260583,
+          "bytesMissing": 65536,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "missing": {
+          "complete": false,
+          "progress": 0.441060476218251,
+          "bytesMissing": 249154,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "restored": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "v5.2.4",
+        "build": {
+          "bitness": 64,
+          "boost": "1.92.0",
+          "libtorrent": "2.0.15.0",
+          "openssl": "3.6.4",
+          "platform": "linux",
+          "qt": "6.10.3",
+          "zlib": "1.3"
+        },
+        "infohashV1": "783df9b756cdfebeb2bd8ed42fdcfc90c5279cd6",
+        "infohashV2": null,
+        "files": [
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+            "length": 0,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+            "length": 1,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+            "length": 16383,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+            "length": 16384,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+            "length": 16385,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+            "length": 65535,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+            "length": 65536,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+            "length": 65537,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+            "length": 200001,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 9,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "BiglyBT",
+      "shape": "multifile",
+      "format": "v2",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "v2",
+        "infohash_v2": "3a4aa394f87900eca7c9b3d151d27edf3d8452b5856abe4156b1bf8daa01e64e",
+        "magnet": "magnet:?xt=urn:btmh:12203a4aa394f87900eca7c9b3d151d27edf3d8452b5856abe4156b1bf8daa01e64e&dn=Release",
+        "name": "Release"
+      },
+      "torrentSHA256": "30da97ef7d531eb716b0c419a8a5ff10b2a13221982627aaaf008a0f95aa94a0",
+      "checks": {
+        "healthy": {
+          "complete": false,
+          "completedPermille": 909,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/1_65535",
+              "length": 65535,
+              "downloaded": 0,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/2_49153",
+              "length": 49153,
+              "downloaded": 49153,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/3_49152",
+              "length": 49152,
+              "downloaded": 49152,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/4_49151",
+              "length": 49151,
+              "downloaded": 49151,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/5_1",
+              "length": 1,
+              "downloaded": 1,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 65537,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/6_65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 200001,
+              "padding": false
+            }
+          ]
+        },
+        "corrupt": {
+          "complete": false,
+          "completedPermille": 819,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/1_65535",
+              "length": 65535,
+              "downloaded": 0,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/2_49153",
+              "length": 49153,
+              "downloaded": 49153,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/3_49152",
+              "length": 49152,
+              "downloaded": 49152,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/4_49151",
+              "length": 49151,
+              "downloaded": 49151,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/5_1",
+              "length": 1,
+              "downloaded": 1,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 65537,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/6_65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 134465,
+              "padding": false
+            }
+          ]
+        },
+        "missing": {
+          "complete": false,
+          "completedPermille": 0,
+          "state": 100,
+          "error": "open fails for '/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin', File not found: /fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin (Read-only file system) (allocateFiles new:/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin)",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/1_65535",
+              "length": 65535,
+              "downloaded": 0,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/2_49153",
+              "length": 49153,
+              "downloaded": 49153,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/3_49152",
+              "length": 49152,
+              "downloaded": 49152,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/4_49151",
+              "length": 49151,
+              "downloaded": 49151,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/5_1",
+              "length": 1,
+              "downloaded": 1,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 65537,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/6_65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 134465,
+              "padding": false
+            }
+          ]
+        },
+        "restored": {
+          "complete": false,
+          "completedPermille": 909,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/1_65535",
+              "length": 65535,
+              "downloaded": 0,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/2_49153",
+              "length": 49153,
+              "downloaded": 49153,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/3_49152",
+              "length": 49152,
+              "downloaded": 49152,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/4_49151",
+              "length": 49151,
+              "downloaded": 49151,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/5_1",
+              "length": 1,
+              "downloaded": 1,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 65537,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/6_65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 200001,
+              "padding": false
+            }
+          ]
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "BiglyBT 4.1.0.0",
+        "infohashV1": null,
+        "infohashV2": "3a4aa394f87900eca7c9b3d151d27edf3d8452b5856abe4156b1bf8daa01e64e",
+        "files": [
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+            "length": 0,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+            "length": 1,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/1_65535",
+            "length": 65535,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+            "length": 16383,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/2_49153",
+            "length": 49153,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+            "length": 16384,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/3_49152",
+            "length": 49152,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+            "length": 16385,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/4_49151",
+            "length": 49151,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+            "length": 65535,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/5_1",
+            "length": 1,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+            "length": 65536,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+            "length": 65537,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/6_65535",
+            "length": 65535,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+            "length": 200001,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 9,
+      "referenceVerified": true,
+      "knownLimitation": "BiglyBT 4.1.0.0: first pure-v2 piece fails when its file map starts with an empty file",
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "qBittorrent",
+      "shape": "multifile",
+      "format": "v2",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "v2",
+        "infohash_v2": "3a4aa394f87900eca7c9b3d151d27edf3d8452b5856abe4156b1bf8daa01e64e",
+        "magnet": "magnet:?xt=urn:btmh:12203a4aa394f87900eca7c9b3d151d27edf3d8452b5856abe4156b1bf8daa01e64e&dn=Release",
+        "name": "Release"
+      },
+      "torrentSHA256": "30da97ef7d531eb716b0c419a8a5ff10b2a13221982627aaaf008a0f95aa94a0",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "corrupt": {
+          "complete": false,
+          "progress": 0.852979841260583,
+          "bytesMissing": 65536,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": true
+        },
+        "missing": {
+          "complete": false,
+          "progress": 0.5513278386224039,
+          "bytesMissing": 200001,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "restored": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "v5.2.4",
+        "build": {
+          "bitness": 64,
+          "boost": "1.92.0",
+          "libtorrent": "2.0.15.0",
+          "openssl": "3.6.4",
+          "platform": "linux",
+          "qt": "6.10.3",
+          "zlib": "1.3"
+        },
+        "infohashV1": null,
+        "infohashV2": "3a4aa394f87900eca7c9b3d151d27edf3d8452b5856abe4156b1bf8daa01e64e",
+        "files": [
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+            "length": 0,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+            "length": 1,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+            "length": 16383,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+            "length": 16384,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+            "length": 16385,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+            "length": 65535,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+            "length": 65536,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+            "length": 65537,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+            "length": 200001,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 9,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "BiglyBT",
+      "shape": "multifile",
+      "format": "hybrid",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "hybrid",
+        "infohash_v1": "c4a5fa431c5c3069c0067bd57943fac3b13aad1f",
+        "infohash_v2": "d3b28aa879943246d0315363f3ad604e1e5ea9b1d072aa5ede9848a8c6da799c",
+        "magnet": "magnet:?xt=urn:btih:c4a5fa431c5c3069c0067bd57943fac3b13aad1f&xt=urn:btmh:1220d3b28aa879943246d0315363f3ad604e1e5ea9b1d072aa5ede9848a8c6da799c&dn=Release",
+        "name": "Release"
+      },
+      "torrentSHA256": "419c7c3bd46d68cf9c4a8cfbbf93fa25d8394587a6ba55dac0a9735fa16396c5",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "completedPermille": 1000,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 1,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49153",
+              "length": 49153,
+              "downloaded": 49153,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49152",
+              "length": 49152,
+              "downloaded": 49152,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49151",
+              "length": 49151,
+              "downloaded": 49151,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/1",
+              "length": 1,
+              "downloaded": 1,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 65537,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 200001,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/62143",
+              "length": 62143,
+              "downloaded": 62143,
+              "padding": true
+            }
+          ]
+        },
+        "corrupt": {
+          "complete": false,
+          "completedPermille": 916,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 1,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49153",
+              "length": 49153,
+              "downloaded": 49153,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49152",
+              "length": 49152,
+              "downloaded": 49152,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49151",
+              "length": 49151,
+              "downloaded": 49151,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/1",
+              "length": 1,
+              "downloaded": 1,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 65537,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 134465,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/62143",
+              "length": 62143,
+              "downloaded": 62143,
+              "padding": true
+            }
+          ]
+        },
+        "missing": {
+          "complete": false,
+          "completedPermille": 0,
+          "state": 100,
+          "error": "open fails for '/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin', File not found: /fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin (Read-only file system) (allocateFiles new:/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin)",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 1,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49153",
+              "length": 49153,
+              "downloaded": 49153,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49152",
+              "length": 49152,
+              "downloaded": 49152,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49151",
+              "length": 49151,
+              "downloaded": 49151,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/1",
+              "length": 1,
+              "downloaded": 1,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 65537,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 134465,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/62143",
+              "length": 62143,
+              "downloaded": 62143,
+              "padding": true
+            }
+          ]
+        },
+        "restored": {
+          "complete": true,
+          "completedPermille": 1000,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+              "length": 0,
+              "downloaded": 0,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+              "length": 1,
+              "downloaded": 1,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+              "length": 16383,
+              "downloaded": 16383,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49153",
+              "length": 49153,
+              "downloaded": 49153,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+              "length": 16384,
+              "downloaded": 16384,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49152",
+              "length": 49152,
+              "downloaded": 49152,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+              "length": 16385,
+              "downloaded": 16385,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/49151",
+              "length": 49151,
+              "downloaded": 49151,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/1",
+              "length": 1,
+              "downloaded": 1,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+              "length": 65536,
+              "downloaded": 65536,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+              "length": 65537,
+              "downloaded": 65537,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/65535",
+              "length": 65535,
+              "downloaded": 65535,
+              "padding": true
+            },
+            {
+              "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+              "length": 200001,
+              "downloaded": 200001,
+              "padding": false
+            },
+            {
+              "path": "/fixture/payload/Release/.pad/62143",
+              "length": 62143,
+              "downloaded": 62143,
+              "padding": true
+            }
+          ]
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "BiglyBT 4.1.0.0",
+        "infohashV1": "c4a5fa431c5c3069c0067bd57943fac3b13aad1f",
+        "infohashV2": "d3b28aa879943246d0315363f3ad604e1e5ea9b1d072aa5ede9848a8c6da799c",
+        "files": [
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+            "length": 0,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+            "length": 1,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/65535",
+            "length": 65535,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+            "length": 16383,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/49153",
+            "length": 49153,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+            "length": 16384,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/49152",
+            "length": 49152,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+            "length": 16385,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/49151",
+            "length": 49151,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+            "length": 65535,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/1",
+            "length": 1,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+            "length": 65536,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+            "length": 65537,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/65535",
+            "length": 65535,
+            "padding": true
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+            "length": 200001,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/.pad/62143",
+            "length": 62143,
+            "padding": true
+          }
+        ]
+      },
+      "filesLocated": 9,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "qBittorrent",
+      "shape": "multifile",
+      "format": "hybrid",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "hybrid",
+        "infohash_v1": "c4a5fa431c5c3069c0067bd57943fac3b13aad1f",
+        "infohash_v2": "d3b28aa879943246d0315363f3ad604e1e5ea9b1d072aa5ede9848a8c6da799c",
+        "magnet": "magnet:?xt=urn:btih:c4a5fa431c5c3069c0067bd57943fac3b13aad1f&xt=urn:btmh:1220d3b28aa879943246d0315363f3ad604e1e5ea9b1d072aa5ede9848a8c6da799c&dn=Release",
+        "name": "Release"
+      },
+      "torrentSHA256": "419c7c3bd46d68cf9c4a8cfbbf93fa25d8394587a6ba55dac0a9735fa16396c5",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "corrupt": {
+          "complete": false,
+          "progress": 0.852979841260583,
+          "bytesMissing": 65536,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": true
+        },
+        "missing": {
+          "complete": false,
+          "progress": 0.5513278386224039,
+          "bytesMissing": 200001,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "restored": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "v5.2.4",
+        "build": {
+          "bitness": 64,
+          "boost": "1.92.0",
+          "libtorrent": "2.0.15.0",
+          "openssl": "3.6.4",
+          "platform": "linux",
+          "qt": "6.10.3",
+          "zlib": "1.3"
+        },
+        "infohashV1": "c4a5fa431c5c3069c0067bd57943fac3b13aad1f",
+        "infohashV2": "d3b28aa879943246d0315363f3ad604e1e5ea9b1d072aa5ede9848a8c6da799c",
+        "files": [
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-0.bin",
+            "length": 0,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-1.bin",
+            "length": 1,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-2.bin",
+            "length": 16383,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-3.bin",
+            "length": 16384,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-4.bin",
+            "length": 16385,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-5.bin",
+            "length": 65535,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-6.bin",
+            "length": 65536,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-7.bin",
+            "length": 65537,
+            "padding": false
+          },
+          {
+            "path": "/fixture/payload/Release/\u0434\u0430\u043d\u043d\u044b\u0435 #1/file-8.bin",
+            "length": 200001,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 9,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "BiglyBT",
+      "shape": "single-file",
+      "format": "v1",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "v1",
+        "infohash_v1": "74ba8f59dcd416384333c45340bf56623efc475b",
+        "magnet": "magnet:?xt=urn:btih:74ba8f59dcd416384333c45340bf56623efc475b&dn=single.bin",
+        "name": "single.bin"
+      },
+      "torrentSHA256": "4d881b420b12145d8e9ee768e3309732e94e18fd3ce80ccc8b4a197be12c758b",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "completedPermille": 1000,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 70003,
+              "padding": false
+            }
+          ]
+        },
+        "corrupt": {
+          "complete": false,
+          "completedPermille": 63,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 4467,
+              "padding": false
+            }
+          ]
+        },
+        "missing": {
+          "complete": false,
+          "completedPermille": 0,
+          "state": 100,
+          "error": "open fails for '/fixture/payload/single.bin', File not found: /fixture/payload/single.bin (Read-only file system) (allocateFiles new:/fixture/payload/single.bin)",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 4467,
+              "padding": false
+            }
+          ]
+        },
+        "restored": {
+          "complete": true,
+          "completedPermille": 1000,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 70003,
+              "padding": false
+            }
+          ]
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "BiglyBT 4.1.0.0",
+        "infohashV1": "74ba8f59dcd416384333c45340bf56623efc475b",
+        "infohashV2": null,
+        "files": [
+          {
+            "path": "/fixture/payload/single.bin",
+            "length": 70003,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 1,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "qBittorrent",
+      "shape": "single-file",
+      "format": "v1",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "v1",
+        "infohash_v1": "74ba8f59dcd416384333c45340bf56623efc475b",
+        "magnet": "magnet:?xt=urn:btih:74ba8f59dcd416384333c45340bf56623efc475b&dn=single.bin",
+        "name": "single.bin"
+      },
+      "torrentSHA256": "4d881b420b12145d8e9ee768e3309732e94e18fd3ce80ccc8b4a197be12c758b",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "corrupt": {
+          "complete": false,
+          "progress": 0.06381155093353141,
+          "bytesMissing": 65536,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "missing": {
+          "complete": false,
+          "progress": 0,
+          "bytesMissing": 70003,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "restored": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "v5.2.4",
+        "build": {
+          "bitness": 64,
+          "boost": "1.92.0",
+          "libtorrent": "2.0.15.0",
+          "openssl": "3.6.4",
+          "platform": "linux",
+          "qt": "6.10.3",
+          "zlib": "1.3"
+        },
+        "infohashV1": "74ba8f59dcd416384333c45340bf56623efc475b",
+        "infohashV2": null,
+        "files": [
+          {
+            "path": "/fixture/payload/single.bin",
+            "length": 70003,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 1,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "BiglyBT",
+      "shape": "single-file",
+      "format": "v2",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "v2",
+        "infohash_v2": "4f93f59f4bf17d437967886a64ad32df079cb14246b0d25cbc4685df4466e117",
+        "magnet": "magnet:?xt=urn:btmh:12204f93f59f4bf17d437967886a64ad32df079cb14246b0d25cbc4685df4466e117&dn=single.bin",
+        "name": "single.bin"
+      },
+      "torrentSHA256": "6af5a067596d45203b1f278bbb89d9c7e20378e61c00cb8e4cb2925d5b6efbde",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "completedPermille": 1000,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 70003,
+              "padding": false
+            }
+          ]
+        },
+        "corrupt": {
+          "complete": false,
+          "completedPermille": 63,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 4467,
+              "padding": false
+            }
+          ]
+        },
+        "missing": {
+          "complete": false,
+          "completedPermille": 0,
+          "state": 100,
+          "error": "open fails for '/fixture/payload/single.bin', File not found: /fixture/payload/single.bin (Read-only file system) (allocateFiles new:/fixture/payload/single.bin)",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 4467,
+              "padding": false
+            }
+          ]
+        },
+        "restored": {
+          "complete": true,
+          "completedPermille": 1000,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 70003,
+              "padding": false
+            }
+          ]
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "BiglyBT 4.1.0.0",
+        "infohashV1": null,
+        "infohashV2": "4f93f59f4bf17d437967886a64ad32df079cb14246b0d25cbc4685df4466e117",
+        "files": [
+          {
+            "path": "/fixture/payload/single.bin",
+            "length": 70003,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 1,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "qBittorrent",
+      "shape": "single-file",
+      "format": "v2",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "v2",
+        "infohash_v2": "4f93f59f4bf17d437967886a64ad32df079cb14246b0d25cbc4685df4466e117",
+        "magnet": "magnet:?xt=urn:btmh:12204f93f59f4bf17d437967886a64ad32df079cb14246b0d25cbc4685df4466e117&dn=single.bin",
+        "name": "single.bin"
+      },
+      "torrentSHA256": "6af5a067596d45203b1f278bbb89d9c7e20378e61c00cb8e4cb2925d5b6efbde",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "corrupt": {
+          "complete": false,
+          "progress": 0.06381155093353141,
+          "bytesMissing": 65536,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": true
+        },
+        "missing": {
+          "complete": false,
+          "progress": 0,
+          "bytesMissing": 70003,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "restored": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "v5.2.4",
+        "build": {
+          "bitness": 64,
+          "boost": "1.92.0",
+          "libtorrent": "2.0.15.0",
+          "openssl": "3.6.4",
+          "platform": "linux",
+          "qt": "6.10.3",
+          "zlib": "1.3"
+        },
+        "infohashV1": null,
+        "infohashV2": "4f93f59f4bf17d437967886a64ad32df079cb14246b0d25cbc4685df4466e117",
+        "files": [
+          {
+            "path": "/fixture/payload/single.bin",
+            "length": 70003,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 1,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "BiglyBT",
+      "shape": "single-file",
+      "format": "hybrid",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "hybrid",
+        "infohash_v1": "5f9e556307e2aa965fe82ae52efa8bd545497207",
+        "infohash_v2": "f4fb5725a3ffdff31f3f5caaf4582014890ea91b7be86747e764b0104fda4c27",
+        "magnet": "magnet:?xt=urn:btih:5f9e556307e2aa965fe82ae52efa8bd545497207&xt=urn:btmh:1220f4fb5725a3ffdff31f3f5caaf4582014890ea91b7be86747e764b0104fda4c27&dn=single.bin",
+        "name": "single.bin"
+      },
+      "torrentSHA256": "3db2b5ff327a1cd3024c96dd6c4cf9da55003ac9580ad3d5ce35678c1cf72fa3",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "completedPermille": 1000,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 70003,
+              "padding": false
+            }
+          ]
+        },
+        "corrupt": {
+          "complete": false,
+          "completedPermille": 63,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 4467,
+              "padding": false
+            }
+          ]
+        },
+        "missing": {
+          "complete": false,
+          "completedPermille": 0,
+          "state": 100,
+          "error": "open fails for '/fixture/payload/single.bin', File not found: /fixture/payload/single.bin (Read-only file system) (allocateFiles new:/fixture/payload/single.bin)",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 4467,
+              "padding": false
+            }
+          ]
+        },
+        "restored": {
+          "complete": true,
+          "completedPermille": 1000,
+          "state": 70,
+          "error": "",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "files": [
+            {
+              "path": "/fixture/payload/single.bin",
+              "length": 70003,
+              "downloaded": 70003,
+              "padding": false
+            }
+          ]
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "BiglyBT 4.1.0.0",
+        "infohashV1": "5f9e556307e2aa965fe82ae52efa8bd545497207",
+        "infohashV2": "f4fb5725a3ffdff31f3f5caaf4582014890ea91b7be86747e764b0104fda4c27",
+        "files": [
+          {
+            "path": "/fixture/payload/single.bin",
+            "length": 70003,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 1,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    },
+    {
+      "client": "qBittorrent",
+      "shape": "single-file",
+      "format": "hybrid",
+      "imported": true,
+      "nativeInfohashes": {
+        "format": "hybrid",
+        "infohash_v1": "5f9e556307e2aa965fe82ae52efa8bd545497207",
+        "infohash_v2": "f4fb5725a3ffdff31f3f5caaf4582014890ea91b7be86747e764b0104fda4c27",
+        "magnet": "magnet:?xt=urn:btih:5f9e556307e2aa965fe82ae52efa8bd545497207&xt=urn:btmh:1220f4fb5725a3ffdff31f3f5caaf4582014890ea91b7be86747e764b0104fda4c27&dn=single.bin",
+        "name": "single.bin"
+      },
+      "torrentSHA256": "3db2b5ff327a1cd3024c96dd6c4cf9da55003ac9580ad3d5ce35678c1cf72fa3",
+      "checks": {
+        "healthy": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "corrupt": {
+          "complete": false,
+          "progress": 0.06381155093353141,
+          "bytesMissing": 65536,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": true
+        },
+        "missing": {
+          "complete": false,
+          "progress": 0,
+          "bytesMissing": 70003,
+          "state": "stoppedDL",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        },
+        "restored": {
+          "complete": true,
+          "progress": 1,
+          "bytesMissing": 0,
+          "state": "stoppedUP",
+          "receivedBytes": 0,
+          "sentBytes": 0,
+          "checkingObserved": false
+        }
+      },
+      "importEvidence": {
+        "ready": true,
+        "client": "v5.2.4",
+        "build": {
+          "bitness": 64,
+          "boost": "1.92.0",
+          "libtorrent": "2.0.15.0",
+          "openssl": "3.6.4",
+          "platform": "linux",
+          "qt": "6.10.3",
+          "zlib": "1.3"
+        },
+        "infohashV1": "5f9e556307e2aa965fe82ae52efa8bd545497207",
+        "infohashV2": "f4fb5725a3ffdff31f3f5caaf4582014890ea91b7be86747e764b0104fda4c27",
+        "files": [
+          {
+            "path": "/fixture/payload/single.bin",
+            "length": 70003,
+            "padding": false
+          }
+        ]
+      },
+      "filesLocated": 1,
+      "referenceVerified": true,
+      "normalExit": true,
+      "clientPayloadUnchanged": true,
+      "originalTorrentUnchanged": true
+    }
+  ],
+  "networkMode": "none",
+  "readOnlyClientInputs": true,
+  "limitations": "No peer downloads, tracker connectivity, Windows client UI or universal client compatibility claim. Hybrid rechecks do not by themselves prove both hash families; the independent BiglyBT hash audit is a separate gate.",
+  "passed": false,
+  "releaseGate": "open",
+  "interfaces": [
+    "lo"
+  ],
+  "runtimeImage": "sha256:586b6f55f75e988ebc9b6a6001de3b24f2b4f556abea686a592cce46d4ddc7f7",
+  "regressionChecksPassed": true,
+  "allClientsVerified": false,
+  "realDownloadManagerImports": 12,
+  "forceRechecks": 48,
+  "fullyVerifiedCases": 11,
+  "containerRemoved": true
+}

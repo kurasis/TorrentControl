@@ -323,6 +323,29 @@ jobs:
       - name: Independent v1 and v2 hash audit (BiglyBT)
         run: python3 tests/integration/biglybt_compatibility.py --proof build/linux-release/tools/tc-proof/tc-proof --jar build/biglybt/BiglyBT.jar --report build/performance/biglybt-hash-audit.json
 
+      - name: Fetch checksum-pinned official stock clients
+        run: python3 tools/stock-client-proof/fetch.py build/stock-clients
+
+      - name: Build isolated stock-client runtime
+        run: |
+          docker build --secret id=host_ca,src=/etc/ssl/certs/ca-certificates.crt \
+            --build-arg HTTPS_PROXY --build-arg https_proxy --build-arg HTTP_PROXY --build-arg http_proxy \
+            --tag tc-stock-clients:ci --file tools/stock-client-proof/Dockerfile tools/stock-client-proof
+
+      - name: Stock download-manager imports and rechecks (open gate reported)
+        run: python3 tests/integration/stock_client_imports.py --proof build/linux-release/tools/tc-proof/tc-proof --clients build/stock-clients --image tc-stock-clients:ci --report build/performance/stock-client-imports.json
+
+      - name: Upload stock-client import evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-stock-client-imports
+          path: |
+            build/performance/stock-client-imports.json
+            build/performance/stock-client-imports-details/logs/
+            build/performance/stock-client-imports-details/fixture/
+          if-no-files-found: warn
+
       - name: Install Clang 18 and sanitizer runtimes
         run: sudo apt-get update && sudo apt-get install -y clang-18 llvm-18 libclang-rt-18-dev
 
