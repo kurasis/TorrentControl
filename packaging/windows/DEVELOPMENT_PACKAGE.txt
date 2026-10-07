@@ -1,0 +1,17 @@
+TorrentControl — unsigned development package
+
+Install for the current Windows user. The online installer requires internet
+access if Microsoft Edge WebView2 Runtime needs installation or updating.
+The offline installer includes Microsoft's complete x64 Evergreen installer.
+Microsoft WebView2 distribution and license information:
+https://developer.microsoft.com/microsoft-edge/webview2/
+https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution
+
+The ZIP package requires an already installed compatible WebView2 Runtime.
+Application settings are stored in %LOCALAPPDATA%\TorrentControl. Uninstalling
+the application preserves these settings and the shared WebView2 Runtime.
+
+This build has no publisher signature. Release acceptance, clean Windows 10/11
+installation checks and selection of the application's license remain open.
+Dependency license texts are included in licenses; THIRD_PARTY_NOTICES.md is
+a summary. package-manifest.json records the source revision and file hashes.

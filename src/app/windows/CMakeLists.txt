@@ -27,3 +27,8 @@ add_custom_command(TARGET TorrentControl POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${PROJECT_SOURCE_DIR}/frontend $<TARGET_FILE_DIR:TorrentControl>/frontend
     COMMENT "Copying frontend assets")
+
+# A reviewed application-only staging root for packaging; no developer tools,
+# debug symbols or build tree. The packaging script adds app-local CRT/notices.
+install(TARGETS TorrentControl RUNTIME DESTINATION . COMPONENT WindowsApp)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/frontend DESTINATION . COMPONENT WindowsApp)

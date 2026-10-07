@@ -95,6 +95,29 @@ jobs:
       - name: Build
         run: cmake --build --preset windows-x64-release
 
+      - name: Build unsigned online and offline development installers
+        shell: pwsh
+        run: ./packaging/windows/build.ps1
+
+      - name: Installed package, prerequisite controls and uninstall
+        shell: pwsh
+        run: ./tests/windows/run-packaging.ps1 -DisposableRunner
+
+      - name: Upload unsigned development packages and installation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TorrentControl-development-packages-windows-x64
+          retention-days: 7
+          path: |
+            build/windows-packages/*-setup.exe
+            build/windows-packages/*.zip
+            build/windows-packages/checksums.json
+            build/windows-packages/stage/package-manifest.json
+            build/windows-package-evidence/summary.json
+            build/windows-package-evidence/*.log
+          if-no-files-found: warn
+
       - name: Install process-tree benchmark driver
         run: python -m pip install -r tests/performance/requirements.txt
 

@@ -1,0 +1,22 @@
+{
+  "innoSetup": {
+    "version": "6.4.3",
+    "url": "https://github.com/jrsoftware/issrc/releases/download/is-6_4_3/innosetup-6.4.3.exe",
+    "sha256": "f3c42116542c4cc57263c5ba6c4feabfc49fe771f2f98a79d2f7628b8762723b",
+    "checksumSource": "Official GitHub release asset digest"
+  },
+  "webviewOnline": {
+    "url": "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/c289719c-c70c-464b-81ea-9efa692d5428/MicrosoftEdgeWebview2Setup.exe",
+    "sha256": "aa38a8cfce6179b87181609b1c730a29eaf26138fc833af5759e67576770f3a3",
+    "sizeBytes": 1850576,
+    "discoveredFrom": "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+  },
+  "webviewOffline": {
+    "url": "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/18c66e75-0385-4019-be3f-3f4a2bb867d5/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
+    "sha256": "ac22ecdc19c5b88b87f3fa752c00da9541653a8f5c0c5fc4a3b2b6ebe6591f69",
+    "sizeBytes": 212358352,
+    "discoveredFrom": "https://go.microsoft.com/fwlink/p/?LinkId=2124701"
+  },
+  "webviewVerification": "SHA-256 pins computed over official HTTPS downloads; Microsoft Authenticode signature is additionally required on Windows before bundling",
+  "pinnedAt": "2026-10-07"
+}
