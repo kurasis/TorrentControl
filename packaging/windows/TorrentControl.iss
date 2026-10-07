@@ -36,7 +36,6 @@ ArchitecturesAllowed=x64os
 ArchitecturesInstallIn64BitMode=x64os
 MinVersion=10.0.19045
 AppMutex={#InstallMutex}
-UninstallAppMutex={#InstallMutex}
 UninstallDisplayIcon={app}\TorrentControl.exe
 DisableProgramGroupPage=yes
 CloseApplications=no
