@@ -116,11 +116,12 @@ with indexed edits preserving unloaded rows.
    delayed opens and driver stalls remain separate release gates.
 3. The [BiglyBT hash audit](independent-v2-hash-audit.md) independently checks
    v1 payload pieces, v2 roots and layers, including separate hybrid failure
-   controls. Full stock download-manager import is still open. Resolve the
-   second client's pure-v2 API and single-file hybrid path issues,
-   cross-check with a mature independent v2 client such as BiglyBT and verify
-   both hybrid hash families independently. Preserve every existing raw-info
-   and canonical-layout guarantee while investigating.
+   controls. The [stock-client import fixture](stock-client-imports.md) now
+   exercises qBittorrent's official GUI and BiglyBT's real download manager,
+   with 12 imports and 48 checks. BiglyBT's leading-empty pure-v2 folder remains
+   an explicit gate; the anacrolix limitations above are unchanged. Both hybrid
+   hash families still require the separate audit. Original metainfo and
+   canonical layout are preserved.
 4. The [bounded fuzz/sanitizer package](fuzz-sanitizers.md) instruments project
    code and adds parser/edit/JSON campaigns. Larger inputs, further subsystems,
    dependencies and Windows instrumentation remain open. Distribution and

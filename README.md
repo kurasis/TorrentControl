@@ -14,6 +14,8 @@ Microsoft Edge WebView2.
 > [network checks](docs/m3-network-diagnostics.md) cover trackers and sampled web seeds.
 > [Performance and independent client compatibility](docs/native-performance-compatibility.md)
 > are in progress. Development builds are unsigned.
+> [Stock client imports](docs/stock-client-imports.md) exercise qBittorrent and
+> BiglyBT; BiglyBT's leading-empty pure-v2 folder gate remains open.
 
 ## Repository layout
 
