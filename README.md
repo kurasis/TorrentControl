@@ -79,6 +79,7 @@ prints `{"status": "failed", "code": ...}` and exits with 2.
 - [Settings persistence and Runtime compatibility](docs/settings-runtime-reliability.md)
 - [Native model pagination](docs/model-pagination.md)
 - [Process-tree memory and real SMB fault evidence](docs/process-memory-smb.md)
+- [Production bridge and diagnostic URL input checks](docs/security-input-harnesses.md)
 - [Long sessions with 3000 real jobs and paged history](docs/long-session-memory.md)
 - [JSON input limits and Windows AddressSanitizer](docs/json-input-windows-asan.md)
 - [Windows SMB cancellation and actual GUI shutdown](docs/windows-smb-faults.md)

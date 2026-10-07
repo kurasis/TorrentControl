@@ -11,8 +11,12 @@ parser.add_argument('--output', type=Path, required=True)
 args = parser.parse_args()
 metainfo = args.output / 'metainfo'
 tagged = args.output / 'tagged_json'
+bridge = args.output / 'bridge_input'
+urls = args.output / 'network_url'
 metainfo.mkdir(parents=True, exist_ok=True)
 tagged.mkdir(parents=True, exist_ok=True)
+bridge.mkdir(parents=True, exist_ok=True)
+urls.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='tc-fuzz-seeds-') as temporary:
     parent = Path(temporary)
     tree = parent / 'Release'
@@ -46,4 +50,36 @@ for name, value in {
     'elided': {'t':'elided'},
 }.items():
     (tagged / name).write_text(json.dumps(value, ensure_ascii=False), encoding='utf-8')
-print(json.dumps({'metainfoSeeds':len(list(metainfo.iterdir())), 'taggedJsonSeeds':len(list(tagged.iterdir()))}))
+request = {'protocolVersion': 1, 'requestId': 'seed', 'operation': 'probe', 'payload': {}}
+for name, changes in {
+    'healthy': {}, 'revision-zero': {'draftRevision': '0'},
+    'revision-max': {'draftRevision': '18446744073709551615'},
+    'revision-overflow': {'draftRevision': '18446744073709551616'},
+    'revision-negative': {'draftRevision': '-1'}, 'bad-id': {'requestId': 'a/b'},
+    'bad-version': {'protocolVersion': 18446744073709551615},
+    'bad-payload': {'payload': []}, 'unknown-operation': {'operation': 'unknown'},
+    'unicode': {'payload': {'name': 'файл', 'escaped': '[\\"{}]'}},
+}.items():
+    (bridge / name).write_text(json.dumps({**request, **changes}, ensure_ascii=False), encoding='utf-8')
+for name, depth in [('depth-boundary', 510), ('depth-rejected', 511), ('very-deep', 10000)]:
+    (bridge / name).write_text('{"protocolVersion":1,"requestId":"deep","operation":"probe",'
+                             '"payload":{"value":' + '[' * depth + '0' + ']' * depth + '}}')
+for name, value in {'malformed': b'{"x":', 'numeric-overflow': b'{"x":1e99999}',
+                    'invalid-utf8': b'{"x":"\xff"}', 'nul': b'{"x":"\x00"}'}.items():
+    (bridge / name).write_bytes(value)
+for name, value in {
+    'https': b'https://example.invalid/path%20name?token=a%2Fb',
+    'auth': b'http://user:synthetic-secret@example.invalid:8080/announce?passkey=synthetic',
+    'ipv6': b'http://[::1]:8080/path', 'scoped-ipv6': b'http://[fe80::1%25test]:8080/path',
+    'udp': b'udp://example.invalid:6969/announce', 'unsupported': b'ftp://example.invalid/path',
+    'bad-port': b'http://example.invalid:65536/', 'fragment': b'http://example.invalid/#fragment',
+    'host-suffix': b'http://127.0.0.1.evil.invalid/path',
+    'nul': b'http://example.invalid/\x00ignored', 'newline': b'http://example.invalid/\r\nX:yes',
+    'backslash': b'http://example.invalid\\@evil.invalid/', 'bad-utf8': b'http://example.invalid/\xff',
+    'max-length': b'https://example.invalid/' + b'x' * (8192 - len(b'https://example.invalid/')),
+    'over-length': b'https://example.invalid/' + b'x' * 8192,
+}.items():
+    (urls / name).write_bytes(value)
+print(json.dumps({name: len(list(folder.iterdir())) for name, folder in
+                  [('metainfoSeeds', metainfo), ('taggedJsonSeeds', tagged),
+                   ('bridgeInputSeeds', bridge), ('networkUrlSeeds', urls)]}))
