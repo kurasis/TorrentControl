@@ -99,3 +99,7 @@ in the same MSVC developer environment. It creates unsigned online/offline
 installers and an app ZIP under `build/windows-packages`. See
 [Windows packaging](windows-packaging.md) for prerequisite integrity, installed
 app proof, uninstall behavior and remaining clean-machine release checks.
+
+CI also uses `windows-11-arm` to execute the same x64 application and developer
+test binaries under Windows 11 emulation. See [Windows 11 compatibility checks](windows-packaging.md#windows-11-arm64-ci)
+for input provenance, unit/integration, installed-app and actual WebView2 checks.

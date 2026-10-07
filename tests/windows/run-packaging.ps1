@@ -1,6 +1,7 @@
 param(
     [string]$PackageDirectory = 'build/windows-packages',
     [string]$EvidenceDirectory = 'build/windows-package-evidence',
+    [string]$FixtureDirectory = '',
     [switch]$DisposableRunner
 )
 Set-StrictMode -Version Latest
@@ -12,6 +13,8 @@ if (-not $IsWindows -or -not $DisposableRunner -or $env:GITHUB_ACTIONS -ne 'true
 $repo = (Resolve-Path "$PSScriptRoot/../..").Path
 $packages = (Resolve-Path $PackageDirectory).Path
 $manifest = Get-Content "$packages/stage/package-manifest.json" -Raw | ConvertFrom-Json
+$armHost = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64'
+if ($FixtureDirectory) { $FixtureDirectory = (Resolve-Path $FixtureDirectory).Path }
 $null = New-Item -ItemType Directory -Path $EvidenceDirectory
 $evidence = (Resolve-Path $EvidenceDirectory).Path
 $install = Join-Path $env:LOCALAPPDATA 'Programs/TorrentControl'
@@ -24,7 +27,8 @@ $sentinel = Join-Path $data ('packaging-user-data-' + [guid]::NewGuid().ToString
 'User settings must survive reinstall and uninstall.' | Set-Content -Encoding utf8 $sentinel
 $sentinelHash = (Get-FileHash $sentinel).Hash.ToLowerInvariant()
 $result = @{ passed = $false; platform = [Environment]::OSVersion.VersionString; sourceCommit = $manifest.sourceCommit;
-    scope = 'GitHub Windows Server runner with existing Runtime; no clean Windows 10/11 certification'; cases = @() }
+    osArchitecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString(); appArchitecture = 'x64';
+    scope = 'GitHub hosted runner with existing Runtime/build tools; no clean disconnected desktop certification'; cases = @() }
 
 function Assert-UserData {
     Assert-TcHash $sentinel $sentinelHash
@@ -113,18 +117,28 @@ try {
 
     # Reinstall/repair restores package bytes while preserving user data.
     'damaged' | Set-Content -Encoding utf8 (Join-Path $install 'frontend/app.css')
-    $null = Install-Package $offline 'offline-repair'
-    $result.cases += Run-InstalledApp 'offline-repair'
+    $repairMode = if ($armHost) { 'online' } else { 'offline' }
+    $repairPackage = if ($armHost) { $online } else { $offline }
+    $null = Install-Package $repairPackage "$repairMode-repair"
+    $result.cases += Run-InstalledApp "$repairMode-repair"
     Uninstall-Package 'first'
     $result.cases += @{ passed = $true; case = 'repair-and-user-data-preserving-uninstall' }
 
-    # Execute the actual bundled Microsoft standalone installer, even with an
-    # existing Runtime. This is a repair control, not a cold/offline OS claim.
-    $runtimeLog = Install-Package $offline 'offline-runtime-repair' @('/INSTALLRUNTIME=1')
+    # ARM64 uses the architecture-selecting online bootstrapper. The offline
+    # product carries only an x64 Runtime and must refuse an ARM64 host.
+    if ($armHost) {
+        $exit = Invoke-TcProcess $offline @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/LOG=$(Join-Path $evidence 'offline-architecture-refusal.log')")
+        if ($exit -eq 0 -or (Test-Path "$install/TorrentControl.exe") -or (Test-Path $uninstallKey)) { throw 'x64-only offline installer did not refuse ARM64' }
+        Assert-UserData
+        $result.cases += @{ passed = $true; case = 'offline-x64-runtime-refuses-arm64'; exitCode = $exit; noAppInstalled = $true }
+    }
+    # Execute the genuine bundled prerequisite, even with an existing Runtime.
+    # This is a repair control, not a cold/offline OS claim.
+    $runtimeLog = Install-Package $repairPackage "$repairMode-runtime-repair" @('/INSTALLRUNTIME=1')
     if (-not (Select-String $runtimeLog -Pattern 'TC_RUNTIME compatible-after-install' -SimpleMatch)) { throw 'Bundled offline prerequisite did not run and verify' }
-    $result.cases += Run-InstalledApp 'offline-runtime-repair'
-    Uninstall-Package 'offline'
-    $result.cases += @{ passed = $true; case = 'official-offline-prerequisite-executed'; cleanOfflineMachine = $false }
+    $result.cases += Run-InstalledApp "$repairMode-runtime-repair"
+    Uninstall-Package $repairMode
+    $result.cases += @{ passed = $true; case = "official-$repairMode-prerequisite-executed"; cleanOfflineMachine = $false }
 
     # Disposable negative fixtures use the same installer code. They are never
     # uploaded as product packages and cannot change any Runtime registry key.
@@ -132,14 +146,17 @@ try {
     $null = New-Item -ItemType Directory -Path $fixtures
     $compiler = Join-Path $packages 'prerequisites/inno/ISCC.exe'
     foreach ($control in @('hash-mismatch', 'vendor-failed', 'success-without-runtime')) {
-        $probe = Join-Path $fixtures "$control.exe"
-        $probeExit = if ($control -eq 'vendor-failed') { 23 } else { 0 }
-        & cl /nologo /MT "/DTC_PROBE_EXIT=$probeExit" "/Fe:$probe" "/Fo:$(Join-Path $fixtures "$control.obj")" "$PSScriptRoot/installer-prerequisite-probe.cpp"
-        if ($LASTEXITCODE -ne 0) { throw 'Prerequisite control build failed' }
-        $hash = if ($control -eq 'hash-mismatch') { '0' * 64 } else { (Get-FileHash $probe).Hash.ToLowerInvariant() }
-        & $compiler "/DStageRoot=$packages/stage" "/DOutputRoot=$fixtures" "/DAppVersion=$($manifest.version)" "/DInstallMutex=$($manifest.installMutex)" '/DRuntimeMinimum=65535.0.0.0' "/DPackageMode=$control" "/DRuntimeSource=$probe" "/DRuntimeSHA256=$hash" "$repo/packaging/windows/TorrentControl.iss"
-        if ($LASTEXITCODE -ne 0) { throw 'Prerequisite negative fixture compilation failed' }
-        $setup = Join-Path $fixtures "TorrentControl-$($manifest.version)-dev-unsigned-windows-x64-$control-setup.exe"
+        $setupName = "TorrentControl-$($manifest.version)-dev-unsigned-windows-x64-$control-setup.exe"
+        if (-not $FixtureDirectory) {
+            $probe = Join-Path $fixtures "$control.exe"
+            $probeExit = if ($control -eq 'vendor-failed') { 23 } else { 0 }
+            & cl /nologo /MT "/DTC_PROBE_EXIT=$probeExit" "/Fe:$probe" "/Fo:$(Join-Path $fixtures "$control.obj")" "$PSScriptRoot/installer-prerequisite-probe.cpp"
+            if ($LASTEXITCODE -ne 0) { throw 'Prerequisite control build failed' }
+            $hash = if ($control -eq 'hash-mismatch') { '0' * 64 } else { (Get-FileHash $probe).Hash.ToLowerInvariant() }
+            & $compiler "/DStageRoot=$packages/stage" "/DOutputRoot=$fixtures" "/DAppVersion=$($manifest.version)" "/DInstallMutex=$($manifest.installMutex)" '/DRuntimeMinimum=65535.0.0.0' "/DPackageMode=$control" "/DRuntimeSource=$probe" "/DRuntimeSHA256=$hash" "$repo/packaging/windows/TorrentControl.iss"
+            if ($LASTEXITCODE -ne 0) { throw 'Prerequisite negative fixture compilation failed' }
+        }
+        $setup = if ($FixtureDirectory) { Join-Path $FixtureDirectory $setupName } else { Join-Path $fixtures $setupName }
         $log = Join-Path $evidence "$control-setup.log"
         $exit = Invoke-TcProcess $setup @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/LOG=$log")
         $marker = switch ($control) { 'hash-mismatch' { 'TC_RUNTIME hash-mismatch' }; 'vendor-failed' { 'TC_RUNTIME exit=23' }; default { 'TC_RUNTIME still-incompatible' } }

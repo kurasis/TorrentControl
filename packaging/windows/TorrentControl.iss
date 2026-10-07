@@ -32,8 +32,15 @@ AppSupportURL=https://github.com/kurasis/TorrentControl
 DefaultDirName={localappdata}\Programs\TorrentControl
 DefaultGroupName=TorrentControl
 PrivilegesRequired=lowest
+#if PackageMode == "offline"
+; This bundle carries the x64 standalone Runtime, not the ARM64 Runtime.
 ArchitecturesAllowed=x64os
 ArchitecturesInstallIn64BitMode=x64os
+#else
+; The online bootstrapper selects the Runtime for the actual operating system.
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 MinVersion=10.0.19045
 AppMutex={#InstallMutex}
 UninstallDisplayIcon={app}\TorrentControl.exe
