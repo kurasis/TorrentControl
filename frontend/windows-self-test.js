@@ -177,13 +177,17 @@ export async function runNativeFlow(actions, state, info) {
     element.dispatchEvent(new Event(event, { bubbles: true }));
   };
   const saveEditor = async (name) => {
+    await until(() => document.getElementById("editor-preview")?.disabled === false, "metadata preview button");
     control("editor-preview").click();
     await until(() => state.editorPreview && !state.editor.busy, "metadata preview");
     const before = state.torrent.id;
     await request("selfTestStep", { name });
+    // State is updated before the scheduled animation-frame render. A fast
+    // native acknowledgement does not guarantee the Save As control exists.
+    await until(() => document.getElementById("editor-output")?.disabled === false, "metadata Save As button");
     control("editor-output").click();
     await until(() => state.editorPreview.outputChosen && !state.editor.busy, "metadata destination");
-    await until(() => document.getElementById("editor-save"), "metadata save button");
+    await until(() => document.getElementById("editor-save")?.disabled === false, "metadata save button");
     control("editor-save").click();
     await until(() => state.torrent.id !== before && state.editor?.torrentId === state.torrent.id, "saved metadata reopen");
     await until(() => document.getElementById("metadata-editor")?.dataset.torrentId === state.torrent.id, "saved editor controls");
