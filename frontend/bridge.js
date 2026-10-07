@@ -59,13 +59,19 @@ function send(operation, payload, draftRevision, attach) {
   const message = { protocolVersion: PROTOCOL_VERSION, requestId, operation, payload };
   if (draftRevision !== undefined && draftRevision !== null) message.draftRevision = String(draftRevision);
   return new Promise((resolve, reject) => {
-    pending.set(requestId, { resolve, reject });
+    // Serialization can throw before anything reaches the native host.
     const text = JSON.stringify(message);
-    if (attach && typeof webview.postMessageWithAdditionalObjects === "function") {
-      // Dropped files travel as native objects; the host reads their paths.
-      webview.postMessageWithAdditionalObjects(text, attach);
-    } else {
-      webview.postMessage(text);
+    pending.set(requestId, { resolve, reject });
+    try {
+      if (attach && typeof webview.postMessageWithAdditionalObjects === "function") {
+        // Dropped files travel as native objects; the host reads their paths.
+        webview.postMessageWithAdditionalObjects(text, attach);
+      } else {
+        webview.postMessage(text);
+      }
+    } catch (error) {
+      pending.delete(requestId);
+      reject(error);
     }
   });
 }

@@ -56,6 +56,7 @@ std::string read_small_file(fs::path const& path, std::size_t max_bytes)
         data.append(buf, static_cast<std::size_t>(in.gcount()));
         if (data.size() > max_bytes) throw CoreError(ErrorCode::ResourceLimit, "File is too large: " + core::to_utf8(path));
     }
+    if (in.bad()) throw CoreError(ErrorCode::SourceUnreadable, "Cannot read " + core::to_utf8(path));
     return data;
 }
 
@@ -210,7 +211,7 @@ void apply_settings_patch(AppSettings& s, json const& patch)
             if (!v.is_string() || v.get<std::string>().size() > 64) throw CoreError(ErrorCode::InvalidArgument, "invalid profile");
             next.last_profile = v.get<std::string>();
         } else if (key == "maxConcurrentJobs") {
-            if (!v.is_number_integer() || v.get<int>() < 1 || v.get<int>() > 8)
+            if (!v.is_number_integer() || v < 1 || v > 8)
                 throw CoreError(ErrorCode::InvalidArgument, "maxConcurrentJobs must be 1 to 8");
             next.max_concurrent_jobs = v.get<int>();
         } else if (key == "openClientWithoutAsking") {
