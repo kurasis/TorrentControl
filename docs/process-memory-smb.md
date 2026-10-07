@@ -24,6 +24,21 @@ access fails the evidence run. A real child/grandchild control verifies summed
 memory and tracking after the original parent exits. Normal GUI shutdown must
 leave no discovered live child processes.
 
+Checkpoints now wait for a completed memory sweep instead of relying on a
+300 ms pause. The headless driver waits on the sampler's observed-phase
+condition; the GUI's developer-only bridge worker waits for an acknowledgement
+file written by the sampler after recording a real resident-memory sample.
+The UI thread remains active. Fresh per-case acknowledgement directories and
+a 15-second deadline reject stale/missing observations. Phase summaries are
+still derived solely from actual sweeps; missing phases are never backfilled.
+Sweeps whose phase changes during process queries are discarded instead of
+assigning old readings to a new phase or acknowledging that phase.
+A real subprocess control holds all six phases while the sampler runs slower
+than the original pause, and a negative control rejects acknowledgement errors.
+These synchronization waits belong to memory fixtures, not production UI flows
+or throughput measurements. The existing pauses still allow later sweeps to
+observe the operations, subject to the sampling limits below.
+
 RSS sums can count shared pages more than once and process queries occur
 sequentially within each sweep. Linux PSS, when accessible, and Windows private
 commit are reported as separate metrics. The driver, OS page cache, kernel and

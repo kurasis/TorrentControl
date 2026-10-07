@@ -27,6 +27,7 @@
 
 #include <atomic>
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -34,6 +35,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -409,15 +411,30 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         };
         if (memory_fixture) {
             auto const input = nlohmann::json::parse(tc::service::read_small_file(std::filesystem::path(*memory_fixture)));
+            auto const sample_ack_directory = tc::core::path_from_utf8(input.value("sampleAckDirectory", std::string{}));
             app.dispatcher.register_operation("prepareSelfTestMemory", [state, input](nlohmann::json const&) {
                 return tc::proof::prepare_fixture(*state->service, input);
             });
-            app.dispatcher.register_operation("memorySelfTestCheckpoint", [state](nlohmann::json const& p) {
+            app.dispatcher.register_operation("memorySelfTestCheckpoint", [state, sample_ack_directory](nlohmann::json const& p) {
                 std::string const phase = p.at("phase");
                 if (phase != "idle" && phase != "scan" && phase != "review" && phase != "create"
                     && phase != "completed" && phase != "cleared")
                     throw tc::bridge::BridgeError("SELF_TEST", "Invalid memory phase");
+                auto const acknowledgement = sample_ack_directory / ("sampled-" + phase);
+                if (!sample_ack_directory.empty() && std::filesystem::exists(acknowledgement))
+                    throw tc::bridge::BridgeError("SELF_TEST", "Stale memory sample acknowledgement");
                 write_self_test_log(*state, "MEMORY " + phase);
+                if (!sample_ack_directory.empty()) {
+                    // This operation runs on a bridge worker. Keep the phase
+                    // stable while the external sampler measures the real
+                    // process tree; the UI thread continues pumping messages.
+                    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+                    while (!std::filesystem::exists(acknowledgement)) {
+                        if (std::chrono::steady_clock::now() >= deadline)
+                            throw tc::bridge::BridgeError("SELF_TEST", "Memory sampler did not acknowledge " + phase);
+                        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    }
+                }
                 return nlohmann::json::object();
             });
             app.dispatcher.register_operation("joinSelfTestMemory", [state](nlohmann::json const&) {
