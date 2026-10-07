@@ -63,11 +63,11 @@ CTest results, control reports and logs are retained in CI artifacts
 
 ## Campaign pause and fixture isolation
 
-Fuzz campaigns are currently paused at the user's request. CI still builds
-the existing drivers and runs deterministic sanitizer tests, but skips the
-campaign step by default. An explicit manual workflow dispatch input
-`run_fuzz_campaigns=true` re-enables it; the runner remains at three requested
-executions per campaign. No new fuzz target or campaign is part of this package.
+Fuzz campaigns were paused for this package. The subsequent
+[input-harness package](security-input-harnesses.md) resumes them at one
+requested execution per campaign, one third of the original budget of three,
+and adds bridge and URL targets. Manual dispatch can opt out. Deterministic
+sanitizer tests remain required regardless of that input.
 
 The stock-client Docker fixture now mounts only its two adapter files instead
 of the complete repository. It verifies the exact bind mounts with Docker

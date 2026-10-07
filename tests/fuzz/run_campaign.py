@@ -13,15 +13,16 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--build", required=True, type=Path)
 parser.add_argument("--corpus", required=True, type=Path)
 parser.add_argument("--output", required=True, type=Path)
-parser.add_argument("--runs", type=int, default=3)
+parser.add_argument("--runs", type=int, default=1)
 parser.add_argument("--seeds", type=int, nargs="+", default=[1, 7, 42])
 args = parser.parse_args()
 if args.runs < 1 or not args.seeds or any(seed < 1 for seed in args.seeds):
     parser.error("runs and seeds must be positive")
 args.output.mkdir(parents=True, exist_ok=True)
-report = {"platform": platform.platform(), "scope": "project-code-only; parser/edit/JSON harnesses",
+report = {"platform": platform.platform(), "scope": "project-code-only; parser/edit/JSON/bridge/URL harnesses; no network or payload I/O",
           "maxInputBytes": 65536, "metainfoDepth": 64, "metainfoNodes": 4096,
-          "jsonDepth": 64, "perInputTimeoutSeconds": 5, "rssLimitMiB": 1024,
+          "jsonDepth": 64, "productionJsonDepth": 512, "perInputTimeoutSeconds": 5, "rssLimitMiB": 1024,
+          "originalRunsPerCampaign": 3,
           "runsPerCampaign": args.runs, "seeds": args.seeds,
           "mode": "smoke" if args.runs <= 3 else "bounded-fuzz",
           "initialCorpusReplayMayExceedRuns": True, "campaigns": [], "campaignPassed": False}
@@ -42,7 +43,7 @@ def save():
 
 
 save()
-for target in ["metainfo", "tagged_json"]:
+for target in ["metainfo", "tagged_json", "bridge_input", "network_url"]:
     binary = (args.build / "tests/fuzz" / f"tc-fuzz-{target}").resolve()
     for seed in args.seeds:
         name = f"{target}-{seed}"

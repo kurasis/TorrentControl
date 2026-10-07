@@ -1,13 +1,14 @@
 # Bounded fuzzing and sanitizer checks
 
-**Campaigns are paused at the user's request.** CI runs deterministic sanitizer
-tests and builds the existing targets, but skips campaigns unless explicitly
-enabled with manual workflow input `run_fuzz_campaigns=true`. Their requested
-budget remains three. See [JSON limits and Windows ASan](json-input-windows-asan.md)
-for the subsequent production input hardening and Windows native instrumentation.
+**Campaigns are enabled at one third of their original requested budget:**
+`--runs=1` instead of `--runs=3`, per target and RNG seed. Push/PR CI includes
+them; a manual dispatch can opt out with `run_fuzz_campaigns=false`.
+See [JSON limits and Windows ASan](json-input-windows-asan.md) for production
+input hardening and Windows native instrumentation, and
+[additional input harnesses](security-input-harnesses.md) for bridge and URL coverage.
 
 `linux-sanitizers` instruments project code with AddressSanitizer and
-UndefinedBehaviorSanitizer. `linux-fuzz` additionally builds two Clang
+UndefinedBehaviorSanitizer. `linux-fuzz` additionally builds four Clang
 libFuzzer targets, with coverage instrumentation in the core, service and
 bridge libraries. Ordinary tests and developer tools use the same instrumented
 libraries. CI uses Clang 18 on Ubuntu 24.04, and runs the entire Linux native
@@ -17,8 +18,8 @@ process. The initial local campaign used Clang 19.1.7 on Debian 13.
 The dependency prefix reuses the pinned release build's libtorrent 2.1.2,
 OpenSSL, Catch2 and other libraries. Their binaries are **not instrumented**;
 this package does not establish sanitizer coverage of those implementations,
-the Windows/WebView2 host, network parsers or full application operation in
-this initial Linux package. Subsequent Windows native ASan coverage is documented
+the Windows/WebView2 host, network response parsing or full application operation.
+URL parsing is exercised without network I/O. Subsequent Windows native ASan coverage is documented
 separately in the link above.
 Regular Windows/Linux/UI jobs remain required alongside this Linux campaign.
 
@@ -38,6 +39,12 @@ tagged values must raise the documented domain error; unexpected exceptions
 fail the run. Before constructing the JSON DOM the driver bounds nesting to
 64; deeper JSON is outside this campaign, rather than tested and declared safe.
 
+`tc-fuzz-bridge_input` exercises the production depth-512 JSON parser, request
+validation, revision parsing, origin refusal, queue refusal and recovery after
+rejection. `tc-fuzz-network_url` exercises diagnostic URL normalization and
+credential-free display origins. Neither harness sends network requests or
+opens payload files. Their contracts and limits are in the report linked above.
+
 Each input is bounded to 64 KiB. Bencode/metainfo use depth 64 and 4,096 nodes;
 edit reparsing allows the small added fields. Each input has a five-second
 deadline and each campaign a 1 GiB RSS limit plus a 600-second process deadline.
@@ -49,9 +56,10 @@ plus binary keys, unsorted/duplicate dictionaries, oversized integers, unsafe
 paths and malformed tagged values.
 
 At the user's request, the runner starts each target from a fresh seed corpus
-for RNG seeds 1, 7 and 42 with `-runs=3`: six short smoke campaigns. LibFuzzer
+for RNG seeds 1, 7 and 42 with `-runs=1`: twelve short smoke campaigns across
+the four targets. The original two targets used `-runs=3`. LibFuzzer
 replays the initial corpus before applying the execution limit, so actual
-executions can exceed three and this budget may produce no new mutations.
+executions can exceed one and this budget may produce no new mutations.
 Reports explicitly mark smoke mode and include the actual execution statistics,
 commands, initial seed counts, elapsed times,
 libFuzzer statistics and exit codes. Logs, mutated corpora and crash inputs
@@ -94,7 +102,8 @@ python3 tests/fuzz/run_campaign.py \
 
 Use a fresh output directory for every rerun; evidence is never overwritten.
 An exploratory local run used 10,000 executions per target after fixing the
-tagged-JSON defect. The committed default and CI use three as requested.
+tagged-JSON defect. The committed default and CI now use one as requested;
+that exploratory 10,000-run experiment is not the original CI budget.
 Increase `--runs` for a longer campaign. `linux-sanitizers` can also use GCC,
 while `linux-fuzz` rejects incompatible compilers or disabled sanitizers at
 configuration time.

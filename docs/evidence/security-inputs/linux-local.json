@@ -1,0 +1,198 @@
+{
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "compiler": "Debian clang version 19.1.7 (3+b1)",
+  "scope": "project-code-only; parser/edit/JSON/bridge/URL harnesses; no network or payload I/O",
+  "ctest": {
+    "total": 175,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "runtimeControlsPassed": 2,
+  "originalRunsPerCampaign": 3,
+  "runsPerCampaign": 1,
+  "initialCorpusReplayMayExceedRuns": true,
+  "campaignPassed": true,
+  "campaigns": [
+    {
+      "target": "metainfo",
+      "seed": 1,
+      "initialCorpusFiles": 14,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 17,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 48
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "metainfo",
+      "seed": 7,
+      "initialCorpusFiles": 14,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 17,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 48
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "metainfo",
+      "seed": 42,
+      "initialCorpusFiles": 14,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 17,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 48
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "tagged_json",
+      "seed": 1,
+      "initialCorpusFiles": 8,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 9,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 32
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "tagged_json",
+      "seed": 7,
+      "initialCorpusFiles": 8,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 9,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 32
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "tagged_json",
+      "seed": 42,
+      "initialCorpusFiles": 8,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 9,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 32
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "bridge_input",
+      "seed": 1,
+      "initialCorpusFiles": 17,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 18,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 49
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "bridge_input",
+      "seed": 7,
+      "initialCorpusFiles": 17,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 18,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 48
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "bridge_input",
+      "seed": 42,
+      "initialCorpusFiles": 17,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 18,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 49
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "network_url",
+      "seed": 1,
+      "initialCorpusFiles": 15,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 16,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 42
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "network_url",
+      "seed": 7,
+      "initialCorpusFiles": 15,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 16,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 42
+      },
+      "passed": true,
+      "artifacts": []
+    },
+    {
+      "target": "network_url",
+      "seed": 42,
+      "initialCorpusFiles": 15,
+      "exitCode": 0,
+      "stats": {
+        "number_of_executed_units": 16,
+        "average_exec_per_sec": 0,
+        "new_units_added": 0,
+        "slowest_unit_time_sec": 0,
+        "peak_rss_mb": 43
+      },
+      "passed": true,
+      "artifacts": []
+    }
+  ]
+}
