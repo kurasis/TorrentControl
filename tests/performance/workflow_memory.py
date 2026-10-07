@@ -13,6 +13,24 @@ import time
 from process_tree import TreeMonitor, Workflow, wait_terminal
 
 
+MEMORY_PHASES = ('idle', 'scan', 'review', 'create', 'completed', 'cleared')
+
+
+class SampleAcknowledgements:
+    """Only an actual completed resident-memory sweep can release a checkpoint."""
+    def __init__(self, directory):
+        self.directory = directory
+        directory.mkdir(exist_ok=False)
+
+    def __call__(self, sample):
+        phase = sample['phase']
+        if phase not in MEMORY_PHASES:
+            return
+        marker = self.directory / ('sampled-' + phase)
+        if not marker.exists():
+            marker.touch(exist_ok=False)
+
+
 def headless(executable, config, folder):
     phase = 'idle'
     with (folder / 'stderr.log').open('w', encoding='utf-8') as error:
@@ -20,23 +38,29 @@ def headless(executable, config, folder):
         monitor = TreeMonitor(workflow.process.pid, lambda: phase).start()
         try:
             time.sleep(0.3)
+            monitor.wait_for_phase(phase)
             phase = 'scan'
             fixture = workflow.call('scan', timeout=480)
             time.sleep(0.3)
+            monitor.wait_for_phase(phase)
             phase = 'review'
             assert workflow.call('review')['canCreate']
             time.sleep(0.3)
+            monitor.wait_for_phase(phase)
             phase = 'create'
             workflow.call('create', timeout=480)
             snapshot = wait_terminal(workflow, timeout=480)
             assert snapshot['job']['state'].startswith('Succeeded'), snapshot['job']['error']
             workflow.call('join')
             time.sleep(0.1)  # Include receipt/join of a very short job in this phase.
+            monitor.wait_for_phase(phase)
             phase = 'completed'
             time.sleep(0.3)
+            monitor.wait_for_phase(phase)
             assert workflow.call('clear')['remaining'] == 0
             phase = 'cleared'
             time.sleep(0.3)
+            monitor.wait_for_phase(phase)
             workflow.finish()
             evidence = monitor.finish()
             evidence['workflow'] = {**fixture, 'historyCleared': True, 'jobState': snapshot['job']['state']}
@@ -52,6 +76,8 @@ def headless(executable, config, folder):
 
 
 def gui(executable, config, folder):
+    acknowledgements = SampleAcknowledgements((folder / 'sample-acks').resolve())
+    config = {**config, 'sampleAckDirectory': str(acknowledgements.directory)}
     config_file = folder / 'fixture.json'
     config_file.write_text(json.dumps(config), encoding='utf-8')
     log = folder / 'gui.log'
@@ -71,7 +97,7 @@ def gui(executable, config, folder):
         return phase
     process = subprocess.Popen([str(executable), '--self-test', str(log), '--self-test-data', str(folder / 'data'),
                                 '--self-test-memory', str(config_file)])
-    monitor = TreeMonitor(process.pid, current_phase).start()
+    monitor = TreeMonitor(process.pid, current_phase, on_sample=acknowledgements).start()
     try:
         assert process.wait(timeout=620) == 0, log.read_text(encoding='utf-8') if log.exists() else 'No GUI log'
         deadline = time.monotonic() + 15

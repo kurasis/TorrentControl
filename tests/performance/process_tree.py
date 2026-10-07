@@ -58,14 +58,17 @@ class Workflow:
 
 
 class TreeMonitor:
-    def __init__(self, pid, phase=lambda: 'workflow', interval=0.05, root_resources=False):
+    def __init__(self, pid, phase=lambda: 'workflow', interval=0.05, root_resources=False, on_sample=None):
         root = psutil.Process(pid)
         self.root = (pid, root.create_time())
         self.known = {self.root: root}
         self.discovered = {self.root: {'pid': pid, 'created': self.root[1], 'name': root.name()}}
         self.phase = phase
+        self.on_sample = on_sample
         self.interval = interval
         self.samples = []
+        self.sampled_phases = set()
+        self.sample_condition = threading.Condition()
         self.errors = []
         self.races = 0
         self.root_resources = root_resources
@@ -79,6 +82,7 @@ class TreeMonitor:
         return self
 
     def _sample(self):
+        phase = self.phase()
         self._resolve_resource_denials()
         # Remember identities after discovery, so reparented children remain
         # included and a reused PID can never become part of this workload.
@@ -130,12 +134,25 @@ class TreeMonitor:
             except psutil.AccessDenied:
                 self.errors.append(f'Cannot read resident memory of {identity[0]}')
         if count:
+            if self.phase() != phase:
+                return  # A mixed-phase sweep cannot acknowledge either phase.
             self.samples.append({'tMs': round((time.monotonic() - self.started) * 1000, 2),
-                                 'phase': self.phase(), 'processes': count, 'residentSumBytes': resident,
+                                 'phase': phase, 'processes': count, 'residentSumBytes': resident,
                                  'rootResidentBytes': root_resident, 'childResidentSumBytes': resident - root_resident,
                                  'rootThreads': root_threads, 'rootHandlesOrFds': root_handles,
                                  'privateCommitBytes': private if os.name == 'nt' else None,
                                  'pssBytes': pss if pss_complete else None})
+            if self.on_sample is not None:
+                self.on_sample(self.samples[-1])
+            with self.sample_condition:
+                self.sampled_phases.add(self.samples[-1]['phase'])
+                self.sample_condition.notify_all()
+
+    def wait_for_phase(self, phase, timeout=15):
+        # Do not fabricate a phase or reuse another phase's memory values.
+        with self.sample_condition:
+            if not self.sample_condition.wait_for(lambda: phase in self.sampled_phases, timeout=timeout):
+                raise TimeoutError(f'Process-tree sampler did not observe phase: {phase}')
 
     def _run(self):
         try:

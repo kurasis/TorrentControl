@@ -4,13 +4,87 @@ import os
 import sys
 import time
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 import psutil
 
 from process_tree import TreeMonitor
+from workflow_memory import SampleAcknowledgements, MEMORY_PHASES
 
 
 class ProcessTreeTests(unittest.TestCase):
+    def test_phase_change_during_sweep_is_not_relabelled_or_acknowledged(self):
+        process = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+        phases = iter(('review', 'create'))
+        acknowledgements = []
+        monitor = TreeMonitor(process.pid, lambda: next(phases), on_sample=acknowledgements.append)
+        try:
+            monitor._sample()
+            self.assertEqual(monitor.samples, [])
+            self.assertEqual(acknowledgements, [])
+            monitor.phase = lambda: 'create'
+            monitor._sample()
+            self.assertEqual([sample['phase'] for sample in monitor.samples], ['create'])
+            self.assertEqual(len(acknowledgements), 1)
+            self.assertGreater(acknowledgements[0]['residentSumBytes'], 0)
+        finally:
+            process.terminate()
+            process.wait(timeout=10)
+
+    def test_slow_sampler_releases_each_checkpoint_only_after_a_real_sweep(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            log = directory / 'phases.log'
+            acknowledgements = SampleAcknowledgements(directory / 'acks')
+            producer = '''import pathlib,sys,time
+log,acks=map(pathlib.Path,sys.argv[1:])
+payload=b'x'*(1024*1024)
+for phase in ('idle','scan','review','create','completed','cleared'):
+    with log.open('a') as stream: stream.write('MEMORY '+phase+'\\n')
+    deadline=time.monotonic()+10
+    while not (acks/('sampled-'+phase)).exists():
+        if time.monotonic()>deadline: raise RuntimeError('No sampler acknowledgement')
+        time.sleep(0.01)
+'''
+            process = subprocess.Popen([sys.executable, '-c', producer, str(log), str(acknowledgements.directory)])
+            def phase():
+                return log.read_text().splitlines()[-1][7:] if log.exists() and log.stat().st_size else 'startup'
+            # Slower than the GUI's 300 ms delay: each producer phase must wait.
+            monitor = TreeMonitor(process.pid, phase, interval=0.4, on_sample=acknowledgements).start()
+            try:
+                self.assertEqual(process.wait(timeout=10), 0)
+                result = monitor.finish()
+                for expected in MEMORY_PHASES:
+                    self.assertIn(expected, result['phases'])
+                    self.assertGreater(result['phases'][expected]['samples'], 0)
+                    self.assertGreater(result['phases'][expected]['peakResidentSumBytes'], 0)
+                    self.assertTrue((acknowledgements.directory / ('sampled-' + expected)).exists())
+                before = len(monitor.samples)
+                with self.assertRaisesRegex(TimeoutError, 'not-observed'):
+                    monitor.wait_for_phase('not-observed', timeout=0.01)
+                self.assertEqual(len(monitor.samples), before)
+            finally:
+                monitor.stop.set()
+                monitor.thread.join(timeout=10)
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=10)
+
+    def test_acknowledgement_failure_rejects_measurement_evidence(self):
+        process = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+        def denied(_sample):
+            raise PermissionError('Cannot acknowledge sample')
+        monitor = TreeMonitor(process.pid, on_sample=denied).start()
+        try:
+            monitor.thread.join(timeout=5)
+            self.assertFalse(monitor.thread.is_alive())
+            with self.assertRaisesRegex(RuntimeError, 'Cannot acknowledge sample'):
+                monitor.finish()
+        finally:
+            process.terminate()
+            process.wait(timeout=10)
+
     def test_descendants_reparenting_and_simultaneous_totals(self):
         grandchild = 'import time; payload = b"g" * (24 * 1024 * 1024); time.sleep(2.5)'
         child = ('import subprocess,sys,time; payload = b"c" * (20 * 1024 * 1024); '
