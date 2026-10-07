@@ -37,6 +37,11 @@ without rebuilding or instrumenting dependencies.
 The prebuilt dependencies and WebView2 host are **not instrumented**. Windows
 UBSan and leak checking are not claimed. Regular Windows GUI, DPAPI, dialog,
 SMB and process-memory tests continue using the ordinary release build.
+MSVC STL vector/string annotations are disabled to match the prebuilt libraries
+and avoid incompatible inline definitions (`LNK2038`). ASan still checks heap
+allocation boundaries and freed memory, but cannot detect access past a
+container's logical size when it stays within allocated capacity. See Microsoft's
+[container annotation requirements](https://learn.microsoft.com/en-us/cpp/sanitizers/error-container-overflow).
 
 ```powershell
 # After building windows-x64-release, in the same MSVC developer prompt:

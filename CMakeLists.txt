@@ -22,6 +22,10 @@ if(TC_ENABLE_SANITIZERS)
             message(FATAL_ERROR "MSVC ASan requires RelWithDebInfo or Release (Debug /RTC is incompatible)")
         endif()
         add_compile_options(/fsanitize=address)
+        # Prebuilt dependencies have no MSVC STL container annotations. All
+        # translation units must agree on these inline definitions (LNK2038).
+        # Ordinary allocation-bound ASan checks remain enabled.
+        add_compile_definitions(_DISABLE_VECTOR_ANNOTATION _DISABLE_STRING_ANNOTATION)
         add_link_options(/INCREMENTAL:NO)
     elseif(NOT WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$")
         add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
