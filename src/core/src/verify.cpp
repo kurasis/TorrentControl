@@ -25,12 +25,35 @@ std::string_view to_string(VerifyStatus s) noexcept
 
 PayloadMapping map_to_root(Metainfo const& m, fs::path const& root)
 {
+    std::error_code ec;
+    fs::path const absolute_root = fs::absolute(root, ec);
+    if (ec) throw CoreError(ErrorCode::SourceUnreadable, "Cannot resolve the selected payload folder", ec.value());
+    fs::path resolved_root = fs::weakly_canonical(absolute_root, ec);
+    if (ec) throw CoreError(ErrorCode::SourceUnreadable, "Cannot resolve the selected payload folder", ec.value());
+    if (resolved_root.filename().empty() && resolved_root.has_relative_path()) resolved_root = resolved_root.parent_path();
     PayloadMapping mapping;
     for (auto const& f : metainfo_files(m)) {
         if (f.pad) continue;
-        fs::path p = root;
+        fs::path p = resolved_root;
         for (auto const& c : f.path) p /= path_from_utf8(c);
-        mapping.emplace(f.torrent_path, std::move(p));
+        fs::path const resolved = fs::weakly_canonical(p, ec);
+        if (ec) throw CoreError(ErrorCode::SourceUnreadable, "Cannot resolve a payload file", ec.value());
+        auto base = resolved_root.begin();
+        auto candidate = resolved.begin();
+        for (; base != resolved_root.end() && candidate != resolved.end(); ++base, ++candidate) {
+#ifdef _WIN32
+            if (fold_case(to_utf8(*base)) != fold_case(to_utf8(*candidate))) break;
+#else
+            if (*base != *candidate) break;
+#endif
+        }
+        if (base != resolved_root.end())
+            throw CoreError(ErrorCode::InvalidArgument, "A payload path resolves outside the selected folder")
+                .with_phase(Phase::Verifying);
+        // Use the resolved path so replacing the original link cannot redirect
+        // the later read. Hostile replacement of resolved parent directories
+        // still needs handle-based protection; this is a mapping-time check.
+        mapping.emplace(f.torrent_path, resolved);
     }
     return mapping;
 }

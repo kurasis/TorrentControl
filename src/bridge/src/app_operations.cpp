@@ -368,7 +368,10 @@ void register_app_operations(Dispatcher& d, AppService& app, HostServices& host)
     });
     d.register_operation("openInClient", [&app, &host](json const& p) {
         // Launching a client is not proof that it found the payload.
-        return json{{"launched", host.open_with_default_app(app.torrent_path(str(p, "id", 64)))}};
+        auto const path = app.torrent_path(str(p, "id", 64));
+        if (core::fold_case(core::to_utf8(path.extension())) != ".TORRENT")
+            throw BridgeError("UNSUPPORTED_FILE_TYPE", "Only .torrent files can be opened in a torrent client");
+        return json{{"launched", host.open_with_default_app(path)}};
     });
     d.register_operation("openExternalLink", [&host](json const& p) {
         std::string const url = str(p, "url", 2048);

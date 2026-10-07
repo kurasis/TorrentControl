@@ -72,6 +72,37 @@ TEST_CASE("the payload may be verified from a differently named folder", "[verif
     CHECK(fx.verify(TorrentFormat::Hybrid, moved).ok);
 }
 
+TEST_CASE("payload mappings confine resolved links to the selected root", "[verify][security]")
+{
+    tc::test::TempDir dir;
+    auto const input = dir.path() / "input";
+    tc::test::write_file(input / "file.bin", 1024, 7);
+    auto const meta = Metainfo::parse(tc::test::make_torrent(input, TorrentFormat::V1, 16 * kib));
+    auto const root = dir.path() / "selected";
+    fs::create_directory(root);
+    fs::path target;
+    bool outside = false;
+    SECTION("an external file is refused before a reader can open it") {
+        target = dir.path() / "outside" / "file.bin";
+        outside = true;
+    }
+    SECTION("an internal link still verifies") {
+        target = root / "real" / "file.bin";
+    }
+    tc::test::write_file(target, 1024, 7);
+    std::error_code ec;
+    fs::create_symlink(target, root / "file.bin", ec);
+    if (ec) SKIP("This environment does not permit creation of symbolic links");
+    if (outside) {
+        CHECK_THROWS_AS(map_to_root(meta, root), CoreError);
+        CHECK(tc::test::read_all(target) == tc::test::read_all(input / "file.bin"));
+    } else {
+        auto files = make_file_payload_source();
+        CHECK(verify_payload(meta, map_to_root(meta, root), *files).ok);
+        CHECK(verify_payload(meta, map_to_root(meta, root / ""), *files).ok);
+    }
+}
+
 TEST_CASE("a corrupted byte is attributed to its file", "[verify]")
 {
     Fixture fx;

@@ -97,6 +97,58 @@ struct Bridge {
 
 } // namespace
 
+TEST_CASE("client launch refuses executable extensions even for valid metainfo", "[bridge][app][security]")
+{
+    Bridge b;
+    auto const source = b.dir.path() / "payload.bin";
+    test::write_file(source, 1024);
+    auto const torrent = test::make_torrent(source, core::TorrentFormat::V1, 16 * 1024);
+    for (auto const* name : {"payload.cmd", "payload.BAT", "payload.exe", "payload.lnk", "payload.url", "payload"}) {
+        auto const path = b.dir.path() / name;
+        test::write_bytes(path, torrent);
+        auto const opened = b.app->open_torrent(path);
+        auto const response = b.call("openInClient", {{"id", opened["id"]}});
+        CHECK(response["ok"] == false);
+        if (response["ok"] == false) CHECK(response["error"]["code"] == "UNSUPPORTED_FILE_TYPE");
+        CHECK(b.host.launched.empty());
+    }
+    for (auto const* name : {"payload.torrent", "payload.TORRENT"}) {
+        auto const path = b.dir.path() / name;
+        test::write_bytes(path, torrent);
+        auto const opened = b.app->open_torrent(path);
+        CHECK(b.ok("openInClient", {{"id", opened["id"]}})["launched"] == true);
+        REQUIRE_FALSE(b.host.launched.empty());
+        CHECK(b.host.launched.back() == fs::absolute(path).lexically_normal());
+    }
+}
+
+TEST_CASE("imported projects cannot restore prior write hydration or resource consent", "[bridge][app][security]")
+{
+    Bridge b;
+    auto const source = b.dir.path() / "payload.bin";
+    auto const output = b.dir.path() / "existing.torrent";
+    test::write_file(source, 1024);
+    test::write_bytes(output, "preserve existing data");
+    b.app->add_sources({source});
+    b.app->wait_for_scan();
+    b.app->set_output(output);
+    b.app->update_draft({{"replaceExisting", true}, {"allowHydration", true}, {"acceptLargeResourceUse", true}}, std::nullopt);
+    auto const project = b.dir.path() / "import.tcproject";
+    b.app->save_project(project);
+    b.app->new_draft();
+    b.host.opens.push_back({project});
+    auto const draft = b.ok("openProject")["draft"];
+    CHECK(draft["output"] == core::to_utf8(fs::absolute(output).lexically_normal()));
+    CHECK(draft["replaceExisting"] == false);
+    CHECK(draft["allowHydration"] == false);
+    CHECK(draft["acceptLargeResourceUse"] == false);
+    b.app->wait_for_scan();
+    auto const started = b.call("startCreate");
+    b.app->jobs().wait_idle();
+    CHECK(started["ok"] == false);
+    CHECK(test::read_all(output) == "preserve existing data");
+}
+
 TEST_CASE("create through the bridge from native selection to result actions", "[bridge][app]")
 {
     Bridge b;
