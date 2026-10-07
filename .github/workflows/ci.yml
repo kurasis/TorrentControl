@@ -397,7 +397,6 @@ jobs:
         run: |
           mkdir -p build/fuzz-evidence
           ctest --preset linux-fuzz --parallel 4 --output-junit "$GITHUB_WORKSPACE/build/fuzz-evidence/ctest.xml"
-          cp -r build/linux-fuzz/tests/sanitizer-runtime build/fuzz-evidence/
 
       - name: Fuzz smoke campaigns (runs=3)
         if: env.TC_RUN_FUZZ_CAMPAIGNS == 'true'
@@ -412,6 +411,7 @@ jobs:
           name: linux-fuzz-sanitizer-evidence
           path: |
             build/fuzz-evidence/
+            build/linux-fuzz/tests/sanitizer-runtime/
             build/linux-fuzz/Testing/Temporary/
           if-no-files-found: warn
 
