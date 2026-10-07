@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      run_fuzz_campaigns:
+        description: Explicitly resume fuzz smoke campaigns (runs=3)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -18,6 +23,9 @@ env:
   VCPKG_COMMIT: 3cbc1db4d867ec83c89fba4c461321c11f78b5e3
   VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
   VCPKG_DISABLE_METRICS: 1
+  # Campaigns are paused at the user's request. Preserve the runs=3 budget
+  # when explicitly re-enabled on a manual workflow dispatch.
+  TC_RUN_FUZZ_CAMPAIGNS: ${{ inputs.run_fuzz_campaigns == true && 'true' || 'false' }}
 
 jobs:
   windows:
@@ -100,6 +108,30 @@ jobs:
 
       - name: Test (unit + headless integration proof)
         run: ctest --preset windows-x64-release
+
+      - name: Configure Windows ASan with prebuilt release dependencies
+        env:
+          TC_DEPS_PREFIX: ${{ github.workspace }}/build/windows-x64-release/vcpkg_installed/x64-windows-static-md
+        run: cmake --preset windows-asan -DTC_REQUIRE_PINNED_TOOLCHAIN=ON
+
+      - name: Build Windows ASan project code and runtime controls
+        run: cmake --build --preset windows-asan --parallel 4
+
+      - name: Native tests under Windows AddressSanitizer
+        env:
+          ASAN_OPTIONS: halt_on_error=1
+        run: ctest --preset windows-asan --parallel 4 --output-junit "$env:GITHUB_WORKSPACE/build/windows-asan/ctest.xml"
+
+      - name: Upload Windows AddressSanitizer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-asan-evidence
+          path: |
+            build/windows-asan/ctest.xml
+            build/windows-asan/tests/sanitizer-runtime/
+            build/windows-asan/Testing/Temporary/
+          if-no-files-found: warn
 
       - name: Long session (3000 real jobs per headless and WebView2 process)
         run: python tests/performance/session_memory.py --proof build/windows-x64-release/tools/tc-proof/tc-workflow-proof.exe --gui build/windows-x64-release/src/app/windows/TorrentControl.exe --report build/performance/windows-long-session.json
@@ -367,6 +399,7 @@ jobs:
           ctest --preset linux-fuzz --parallel 4 --output-junit "$GITHUB_WORKSPACE/build/fuzz-evidence/ctest.xml"
 
       - name: Fuzz smoke campaigns (runs=3)
+        if: env.TC_RUN_FUZZ_CAMPAIGNS == 'true'
         run: |
           python3 tests/fuzz/seed_corpus.py --proof build/linux-fuzz/tools/tc-proof/tc-proof --output build/fuzz-seeds
           python3 tests/fuzz/run_campaign.py --build build/linux-fuzz --corpus build/fuzz-seeds --output build/fuzz-evidence/campaign --runs 3
@@ -378,6 +411,7 @@ jobs:
           name: linux-fuzz-sanitizer-evidence
           path: |
             build/fuzz-evidence/
+            build/linux-fuzz/tests/sanitizer-runtime/
             build/linux-fuzz/Testing/Temporary/
           if-no-files-found: warn
 

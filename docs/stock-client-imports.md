@@ -51,6 +51,9 @@ Clients run under an unprivileged UID in a disposable Docker container with
 `--network none`, only loopback, a read-only root, dropped capabilities and
 `no-new-privileges`. Payload, original torrents, adapters and vendor binaries
 are mounted read-only; only private client profiles and `/tmp` are writable.
+Only the two adapter files are mounted; the repository and its Git metadata
+are excluded. The driver checks the exact bind mounts using Docker inspect
+and records `repositoryMounted: false` in new reports.
 The driver changes/removes/restores the test payload from the host side.
 Missing data may yield a native storage error because the client cannot
 recreate a file on the read-only mount; this proves refusal of incomplete

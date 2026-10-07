@@ -110,7 +110,10 @@ def main():
         with (logs / "appimage-extraction.log").open("w") as log:
             subprocess.run([str(appimage), "--appimage-extract"], cwd=app, stdout=log,
                            stderr=subprocess.STDOUT, check=True, timeout=60)
-        mounts = [(ROOT, "/repo", True), (fixture.resolve(), "/fixture", True),
+        adapters = ROOT / "tools/stock-client-proof"
+        mounts = [(adapters / "BiglyStock.java", "/adapters/BiglyStock.java", True),
+                  (adapters / "qbittorrent_stock.py", "/adapters/qbittorrent_stock.py", True),
+                  (fixture.resolve(), "/fixture", True),
                   (profiles.resolve(), "/profiles", False), (app / "squashfs-root", "/clients/qbt", True),
                   (args.clients.resolve() / "BiglyBT.jar", "/clients/BiglyBT.jar", True)]
         command = ["docker", "run", "--detach", "--name", container, "--network", "none", "--read-only",
@@ -121,6 +124,11 @@ def main():
         command.append(args.image)
         run(command); active = True
         assert run(["docker", "inspect", container, "--format", "{{.HostConfig.NetworkMode}}"]).strip() == "none"
+        actual_mounts = json.loads(run(["docker", "inspect", container, "--format", "{{json .Mounts}}"]))
+        actual_binds = {(m["Source"], m["Destination"], not m["RW"]) for m in actual_mounts if m["Type"] == "bind"}
+        assert actual_binds == {(str(source), target, readonly) for source, target, readonly in mounts}, actual_binds
+        report["repositoryMounted"] = False
+        report["adapterMounts"] = ["/adapters/BiglyStock.java", "/adapters/qbittorrent_stock.py"]
         interfaces = json.loads(run(["docker", "exec", container, "python3", "-c", "import os,json; print(json.dumps(os.listdir('/sys/class/net')))"]))
         assert interfaces == ["lo"], interfaces
         report["interfaces"] = interfaces
@@ -142,9 +150,9 @@ def main():
                     imported = "/fixture/torrents/" + torrent.name
                     if client_name == "BiglyBT":
                         adapter = ["java", "-Xmx256m", "--add-opens=java.base/java.net=ALL-UNNAMED",
-                            "-cp", "/clients/BiglyBT.jar", "/repo/tools/stock-client-proof/BiglyStock.java", profile, imported, "/fixture/payload"]
+                            "-cp", "/clients/BiglyBT.jar", "/adapters/BiglyStock.java", profile, imported, "/fixture/payload"]
                     else:
-                        adapter = ["python3", "/repo/tools/stock-client-proof/qbittorrent_stock.py", "--app", "/clients/qbt/AppRun",
+                        adapter = ["python3", "/adapters/qbittorrent_stock.py", "--app", "/clients/qbt/AppRun",
                             "--profile", profile, "--torrent", imported, "--parent", "/fixture/payload"]
                     case = {"client": client_name, "shape": shape, "format": fmt, "imported": False,
                             "nativeInfohashes": created["result"], "torrentSHA256": raw_digest, "checks": {}}

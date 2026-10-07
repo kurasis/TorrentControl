@@ -1,6 +1,7 @@
 #include "tc/service/storage.hpp"
 
 #include "tc/core/error.hpp"
+#include "tc/service/json_input.hpp"
 
 #include <fstream>
 #include <random>
@@ -76,7 +77,7 @@ void save_project(fs::path const& path, Draft const& d, int resolved_piece_lengt
 
 Draft load_project(fs::path const& path)
 {
-    json const j = json::parse(read_small_file(path, max_project_bytes), nullptr, false);
+    json const j = parse_json_input(read_small_file(path, max_project_bytes));
     if (j.is_discarded() || !j.is_object() || j.value("format", "") != "torrentcontrol-project")
         throw CoreError(ErrorCode::UnsupportedFormat, "Not a TorrentControl project file");
     if (!j.contains("version") || !j.at("version").is_number_integer()
@@ -246,7 +247,7 @@ AppSettings load_settings(fs::path const& path)
     AppSettings s;
     std::error_code ec;
     if (!fs::exists(path, ec)) return s;
-    json j = json::parse(read_small_file(path, max_settings_bytes), nullptr, false);
+    json j = parse_json_input(read_small_file(path, max_settings_bytes));
     if (j.is_discarded() || !j.is_object()) return s; // a damaged file falls back to defaults
     json patch = j;
     patch.erase("customProfiles");

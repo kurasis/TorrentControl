@@ -85,3 +85,8 @@ prefix.
 
 Run one group with `ctest --preset <preset> -R integration` or pass Catch2 tags
 directly: `tc_unit_tests "[engine]"`.
+
+The `windows-asan` preset instruments native project code with MSVC ASan and
+uses the release build's dependencies through `TC_DEPS_PREFIX`. Linux presets
+use ASan and UBSan. See [JSON input and Windows ASan checks](json-input-windows-asan.md)
+for commands, runtime controls, scope and the current fuzz-campaign pause.

@@ -1,5 +1,11 @@
 # Bounded fuzzing and sanitizer checks
 
+**Campaigns are paused at the user's request.** CI runs deterministic sanitizer
+tests and builds the existing targets, but skips campaigns unless explicitly
+enabled with manual workflow input `run_fuzz_campaigns=true`. Their requested
+budget remains three. See [JSON limits and Windows ASan](json-input-windows-asan.md)
+for the subsequent production input hardening and Windows native instrumentation.
+
 `linux-sanitizers` instruments project code with AddressSanitizer and
 UndefinedBehaviorSanitizer. `linux-fuzz` additionally builds two Clang
 libFuzzer targets, with coverage instrumentation in the core, service and
@@ -11,7 +17,9 @@ process. The initial local campaign used Clang 19.1.7 on Debian 13.
 The dependency prefix reuses the pinned release build's libtorrent 2.1.2,
 OpenSSL, Catch2 and other libraries. Their binaries are **not instrumented**;
 this package does not establish sanitizer coverage of those implementations,
-the Windows/WebView2 host, network parsers or full application operation.
+the Windows/WebView2 host, network parsers or full application operation in
+this initial Linux package. Subsequent Windows native ASan coverage is documented
+separately in the link above.
 Regular Windows/Linux/UI jobs remain required alongside this Linux campaign.
 
 ## Harnesses and limits
@@ -33,7 +41,8 @@ fail the run. Before constructing the JSON DOM the driver bounds nesting to
 Each input is bounded to 64 KiB. Bencode/metainfo use depth 64 and 4,096 nodes;
 edit reparsing allows the small added fields. Each input has a five-second
 deadline and each campaign a 1 GiB RSS limit plus a 600-second process deadline.
-These are fuzz-driver limits; production defaults are unchanged. No payload
+These are fuzz-driver limits; this initial package did not alter production
+defaults. The subsequent JSON input limit is 512 containers. No payload
 I/O is performed by the drivers. The seed generator creates real single/multi
 v1/v2/hybrid torrents with empty files, Unicode paths and piece boundaries,
 plus binary keys, unsorted/duplicate dictionaries, oversized integers, unsafe
@@ -49,7 +58,8 @@ libFuzzer statistics and exit codes. Logs, mutated corpora and crash inputs
 are retained even on failure. `campaignPassed` requires successful exits and
 at least the requested execution counts; it is not a release security certification.
 Longer continuous campaigns, production-sized inputs, additional subsystems
-and dependency/Windows instrumentation remain further work.
+and dependency instrumentation remain further work. Windows project code is
+now covered by a separate ASan preset; its GUI host remains outside that preset.
 
 ## Findings included in this package
 
