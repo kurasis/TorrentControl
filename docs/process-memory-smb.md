@@ -139,4 +139,5 @@ Physical remote NAS, arbitrary storage-driver stalls and shutdown against an
 indefinitely unavailable server remain release gates.
 The cloud workspace kernel lacks CIFS; that fixture is validated on the Linux
 CI runner, and this prerequisite is not reported as a passing local SMB test.
-Fuzz campaigns retain the user's three-run smoke limit.
+Fuzz campaigns now use `--runs=1`, one third of the original three-run budget;
+see [current campaign scope](security-input-harnesses.md).

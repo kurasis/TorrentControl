@@ -82,4 +82,5 @@ overview data and reports; profile/review calculations can still build full
 native intermediate data. Job history is now a bounded page with one selected
 summary, covered by [long-session checks](long-session-memory.md). Real SMB fault tests,
 stock independent client import, expanded fuzzing and clean-machine release
-acceptance remain open. Fuzz campaigns keep the user's three-run smoke limit.
+acceptance remain open. Fuzz campaigns now use `--runs=1`, one third of the
+original three-run budget; see [current campaign scope](security-input-harnesses.md).

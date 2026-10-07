@@ -55,9 +55,7 @@ if(TC_BUILD_TOOLS)
     set_tests_properties(integration_proof PROPERTIES
         ENVIRONMENT "TC_PROOF=$<TARGET_FILE:tc-proof>;TC_VERIFIER=${PROJECT_SOURCE_DIR}/tools/reference/verify_torrent.py"
         TIMEOUT 600)
-endif()
 
-if(TC_BUILD_TOOLS)
     add_test(NAME network_diagnostics_proof
         COMMAND ${Python3_EXECUTABLE} -m unittest -v test_network
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/integration)

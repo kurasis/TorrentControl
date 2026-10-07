@@ -115,7 +115,8 @@ on this container, not process-wide memory limits.
 Regressions cover reentrant terminal clearing, concurrent Clear/enqueue,
 queued cancellation with other work running, bounded batch archives, retained
 verification details, 3000-row UI recovery and 3000 additional events. Fuzz
-campaigns keep the user's **three runs per campaign**.
+campaigns now use **one requested run per campaign**, one third of the original
+budget; see [current campaign scope](security-input-harnesses.md).
 The mocked browser suite also runs the developer driver through the real
 controller adapters to catch response-shape mistakes; engine and actual
 Windows/WebView2 claims come from the separate native CI sessions.

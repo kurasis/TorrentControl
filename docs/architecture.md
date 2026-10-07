@@ -35,7 +35,7 @@ frontend (HTML/CSS/JS, bundled)            src/app/windows (NativeHost)
 | MetainfoService | `src/core/bencode.*`, `src/core/metainfo.*`, `src/core/field_registry.*`, `src/service/torrent_editor.cpp` | Field registry, immutable edit previews, lossless bencode, metainfo validation, outer and info edits, signatures, legacy labels, magnet export |
 | Verification | `src/core/verify.*` | Payload verification against any metainfo, per-file results |
 | PersistenceService | `src/core/output.*`, `src/service/storage.*` | Atomic output commit, atomic settings and project files, DPAPI-protected passkeys |
-| DiagnosticsService | — | M3 |
+| DiagnosticsService | `src/service/diagnostics.*`, `src/service/network_probe.cpp` | Explicit HTTP/UDP tracker and web-seed checks, bounded workers and responses, cancellation, redaction and paged results |
 | JobScheduler | `src/service/jobs.*` | Queue with a concurrency limit, the job state machine of section 14.2, pause/resume/cancel, settings snapshot per job, progress throttling, bounded logs |
 | ProjectService | `src/service/draft.*`, `src/service/profiles.*`, `src/service/batch.*`, `src/service/app_service.*` | Revisioned draft, profiles with change preview and undo, batch planning with conflict policies, projects |
 
@@ -148,8 +148,10 @@ of the same job to the newest, and sends each as
 Sequence numbers are monotonic; the page ignores anything older than what it
 has applied, and job snapshots carry their own version.
 
-Bridge requests are answered on the UI thread outside the WebView2 callback,
-because handlers may open modal dialogs. Paths for privileged operations
+Bridge commands run on one ordered worker (`AsyncDispatcher`), keeping service
+work off the window thread. Native dialogs and other UI-only operations are
+marshalled to that thread through `UiTasks`, outside the WebView2 callback;
+replies are also posted back to the UI thread. Paths for privileged operations
 never come from the page: files are chosen in native dialogs, dropped files
 are read from the `ICoreWebView2File` objects WebView2 attaches to the
 message, and later commands refer to native-owned IDs.
