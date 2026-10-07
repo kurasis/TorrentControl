@@ -1,6 +1,7 @@
 #include "host_services.hpp"
 
 #include "webview_host.hpp"
+#include "tc/core/manifest.hpp"
 
 #include <shellapi.h>
 #include <shlobj.h>
@@ -161,6 +162,8 @@ void WindowsHostServices::show_in_folder(std::filesystem::path const& file)
 
 bool WindowsHostServices::open_with_default_app(std::filesystem::path const& file)
 {
+    if (file.native().find(std::filesystem::path::value_type{}) != std::filesystem::path::string_type::npos
+        || core::fold_case(core::to_utf8(file.extension())) != ".TORRENT") return false;
     if (!ui_.is_owner_thread()) return ui_.invoke([this, file] { return open_with_default_app(file); });
     // The path is the "file" argument, not part of a command line, so it is
     // never parsed as parameters.

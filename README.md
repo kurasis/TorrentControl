@@ -74,6 +74,7 @@ prints `{"status": "failed", "code": ...}` and exits with 2.
 - [Windows development installers and offline Runtime](docs/windows-packaging.md)
 - [Architecture](docs/architecture.md)
 - [Focused code audit and maintenance](docs/code-audit-2026-10-07.md)
+- [End-user security audit](docs/security-audit-2026-10-07.md)
 - [Engine notes and known limitations](docs/engine-notes.md)
 - [Acceptance evidence](docs/acceptance.md)
 - [M0 integration proof report](docs/m0-integration-proof.md)

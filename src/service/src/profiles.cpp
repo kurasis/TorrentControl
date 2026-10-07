@@ -19,6 +19,25 @@ bool is_alnum(char c)
 // alphanumeric with digits.
 bool passkey_like(std::string_view seg)
 {
+    // Classify the decoded bytes, but never change the URL used by the tracker.
+    // Otherwise percent-encoding can hide a passkey from exports and DPAPI.
+    auto hex = [](char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    std::string decoded;
+    if (seg.find('%') != std::string_view::npos) {
+        decoded.reserve(seg.size());
+        for (std::size_t i = 0; i < seg.size(); ++i) {
+            if (seg[i] == '%' && i + 2 < seg.size() && hex(seg[i + 1]) >= 0 && hex(seg[i + 2]) >= 0) {
+                decoded.push_back(static_cast<char>((hex(seg[i + 1]) << 4) | hex(seg[i + 2])));
+                i += 2;
+            } else decoded.push_back(seg[i]);
+        }
+        seg = decoded;
+    }
     if (seg.size() < 16) return false;
     std::size_t alnum = 0;
     std::size_t digits = 0;

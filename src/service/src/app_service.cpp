@@ -936,6 +936,10 @@ void AppService::save_project(fs::path const& path)
 json AppService::load_project(fs::path const& path)
 {
     Draft loaded = service::load_project(path);
+    // A project is data, not a fresh user grant for destructive or costly work.
+    loaded.replace_existing = false;
+    loaded.allow_hydration = false;
+    loaded.accept_large_resource_use = false;
     std::lock_guard lock(mutex_);
     undo_.push_back(draft_);
     if (undo_.size() > max_undo) undo_.erase(undo_.begin());

@@ -1,15 +1,23 @@
 #include "tc/service/storage.hpp"
 
 #include "tc/core/error.hpp"
+#include "tc/core/output.hpp"
 #include "tc/service/json_input.hpp"
 
+#include <cstdio>
 #include <fstream>
-#include <random>
+#include <fcntl.h>
+#include <memory>
 #include <set>
 
 #ifdef _WIN32
 #include <windows.h>
 #include <dpapi.h>
+#include <io.h>
+#include <share.h>
+#include <sys/stat.h>
+#else
+#include <unistd.h>
 #endif
 
 namespace tc::service {
@@ -19,19 +27,44 @@ using nlohmann::json;
 using core::CoreError;
 using core::ErrorCode;
 
+namespace {
+
+// Acquire the temporary file itself, rather than checking then truncating a
+// pathname that another process could already own or redirect through a link.
+std::FILE* create_private_file(fs::path const& path)
+{
+    int fd = -1;
+#ifdef _WIN32
+    if (_wsopen_s(&fd, path.c_str(), _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY | _O_NOINHERIT,
+            _SH_DENYRW, _S_IREAD | _S_IWRITE) != 0) return nullptr;
+    auto* file = _fdopen(fd, "wb");
+    if (!file) _close(fd);
+#else
+    fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+    if (fd < 0) return nullptr;
+    auto* file = ::fdopen(fd, "wb");
+    if (!file) ::close(fd);
+#endif
+    if (!file) {
+        std::error_code ec;
+        fs::remove(path, ec); // only after this call successfully created it
+    }
+    return file;
+}
+
+} // namespace
+
 void write_file_atomic(fs::path const& path, std::string_view bytes)
 {
-    std::random_device rd;
-    fs::path const tmp = path.parent_path()
-        / core::path_from_utf8("." + core::to_utf8(path.filename()) + ".tc-" + std::to_string(rd()) + ".tmp");
+    fs::path const tmp = core::temp_path_for(path);
     {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        auto close_file = [](std::FILE* file) { std::fclose(file); };
+        std::unique_ptr<std::FILE, decltype(close_file)> out(create_private_file(tmp), close_file);
         if (!out) throw CoreError(ErrorCode::OutputWriteFailed, "Cannot write " + core::to_utf8(path));
-        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-        out.flush();
-        bool const flushed = static_cast<bool>(out);
-        out.close();
-        if (!flushed || !out) {
+        bool const written = bytes.empty() || std::fwrite(bytes.data(), 1, bytes.size(), out.get()) == bytes.size();
+        bool const flushed = std::fflush(out.get()) == 0;
+        bool const closed = std::fclose(out.release()) == 0;
+        if (!written || !flushed || !closed) {
             std::error_code ec;
             fs::remove(tmp, ec);
             throw CoreError(ErrorCode::OutputWriteFailed, "Cannot write " + core::to_utf8(path));

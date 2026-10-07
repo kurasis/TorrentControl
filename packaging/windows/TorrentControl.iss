@@ -70,6 +70,8 @@ const
 function CompatibleVersion(const Text: String): Boolean;
 var
   Current, Minimum: Int64;
+  CurrentMajor, CurrentMinor, CurrentRevision, CurrentBuild: Word;
+  MinimumMajor, MinimumMinor, MinimumRevision, MinimumBuild: Word;
   I, Dots: Integer;
 begin
   Result := False;
@@ -81,7 +83,14 @@ begin
   if Dots <> 3 then Exit;
   if not StrToVersion(Text, Current) then Exit;
   if not StrToVersion('{#RuntimeMinimum}', Minimum) then Exit;
-  Result := ComparePackedVersion(Current, Minimum) >= 0;
+  { Packed versions with major >= 32768 have the Int64 sign bit set.
+    Compare unsigned components instead of signed packed integers. }
+  UnpackVersionComponents(Current, CurrentMajor, CurrentMinor, CurrentRevision, CurrentBuild);
+  UnpackVersionComponents(Minimum, MinimumMajor, MinimumMinor, MinimumRevision, MinimumBuild);
+  if CurrentMajor <> MinimumMajor then Result := CurrentMajor > MinimumMajor
+  else if CurrentMinor <> MinimumMinor then Result := CurrentMinor > MinimumMinor
+  else if CurrentRevision <> MinimumRevision then Result := CurrentRevision > MinimumRevision
+  else Result := CurrentBuild >= MinimumBuild;
 end;
 
 function RuntimeCompatible: Boolean;

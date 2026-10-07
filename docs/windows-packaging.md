@@ -43,7 +43,7 @@ Uninstall removes application files/shortcuts/registration, preserves
 
 ## Prerequisite integrity and behavior
 
-`packaging/windows/prerequisites.json` pins Inno Setup 6.4.3 against its official
+`packaging/windows/prerequisites.json` pins Inno Setup 6.7.3 against its official
 GitHub release asset SHA-256. Bootstrapper and standalone pins were computed
 over official Microsoft HTTPS downloads; Windows additionally requires valid
 Microsoft Authenticode signatures before packaging. Immutable resolved Microsoft

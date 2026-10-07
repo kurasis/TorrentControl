@@ -23,10 +23,26 @@
 #include <new>
 #include <thread>
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
+
 using namespace tc;
 using namespace tc::service;
 using nlohmann::json;
 namespace fs = std::filesystem;
+
+TEST_CASE("imported draft paths reject embedded NUL without rejecting ordinary Unicode", "[service][project][security]")
+{
+    std::string invalid = "payload.cmd";
+    invalid += '\0';
+    invalid += ".torrent";
+    CHECK_THROWS_AS(draft_from_json(json{{"output", invalid}}), core::CoreError);
+    CHECK_THROWS_AS(draft_from_json(json{{"sources", json::array({{{"id", "s1"}, {"path", invalid}}})}}), core::CoreError);
+    std::string const unicode = "Документы/音楽.torrent";
+    CHECK(core::to_utf8(draft_from_json(json{{"output", unicode}}).output) == unicode);
+    CHECK(draft_from_json(json{{"output", ""}}).output.empty());
+}
 
 TEST_CASE("settings reject out-of-range integers before narrowing", "[service][settings][audit]")
 {
@@ -734,6 +750,68 @@ TEST_CASE("credentials are masked in URLs", "[service][U05]")
     CHECK(redact_url("http://user:pw@t.example:80/x") == "http://***@t.example:80/x");
     CHECK_FALSE(looks_secret("http://tracker.qu.ax:6969/announce"));
     CHECK(looks_secret("https://t.example/announce?pk=1"));
+}
+
+TEST_CASE("encoded path passkeys are masked and protected without changing tracker URLs", "[service][settings][security]")
+{
+    std::string const url = "https://t.example/%61%31%62%32%63%33%64%34%65%35%66%36%61%37%62%38%63%39%64%30/announce";
+    CHECK(redact_url(url) == "https://t.example/***/announce");
+    CHECK(looks_secret(url));
+    CHECK(redact_url("https://t.example/ann%6funce") == "https://t.example/ann%6funce");
+    CHECK(redact_url("https://t.example/a%ZZ/announce") == "https://t.example/a%ZZ/announce");
+    Profile profile;
+    profile.id = "encoded";
+    profile.name = "Encoded tracker";
+    profile.trackers.push_back({url, 0, true});
+    CHECK(export_profile(profile, false)["trackers"][0]["url"] == "https://t.example/***/announce");
+    CHECK(export_profile(profile, true)["trackers"][0]["url"] == url);
+    test::TempDir dir;
+    AppSettings settings;
+    settings.custom_profiles.push_back(profile);
+    auto const path = dir.path() / "settings.json";
+    save_settings(path, settings);
+    auto const persisted = json::parse(test::read_all(path));
+    CHECK_FALSE(persisted["customProfiles"][0]["trackers"][0].contains("url"));
+    CHECK(persisted["customProfiles"][0]["trackers"][0].contains("urlProtected"));
+    auto const loaded = load_settings(path);
+    REQUIRE(loaded.custom_profiles.size() == 1);
+    CHECK(loaded.custom_profiles[0].trackers[0].url == url);
+}
+
+TEST_CASE("atomic service writes preserve targets and keep private data owner-only", "[service][storage][security]")
+{
+#ifndef _WIN32
+    struct RestoreMask {
+        mode_t previous = ::umask(0022);
+        ~RestoreMask() { ::umask(previous); }
+    } restore_mask;
+#endif
+    test::TempDir dir;
+    auto const path = dir.path() / "private.tcproject";
+    test::write_bytes(path, "previous");
+    std::string const bytes("replacement\0bytes", 17);
+    write_file_atomic(path, bytes);
+    CHECK(test::read_all(path) == bytes);
+#ifndef _WIN32
+    auto const permissions = fs::status(path).permissions();
+    CHECK((permissions & (fs::perms::group_all | fs::perms::others_all)) == fs::perms::none);
+    auto const protected_file = dir.path() / "unrelated.txt";
+    test::write_bytes(protected_file, "keep me");
+    fs::remove(path);
+    fs::create_symlink(protected_file, path);
+    write_file_atomic(path, "new data");
+    CHECK_FALSE(fs::is_symlink(path));
+    CHECK(test::read_all(path) == "new data");
+    CHECK(test::read_all(protected_file) == "keep me");
+#endif
+    write_file_atomic(path, {});
+    CHECK(test::read_all(path).empty());
+    auto const directory = dir.path() / "existing-directory";
+    fs::create_directory(directory);
+    CHECK_THROWS_AS(write_file_atomic(directory, "cannot replace directory"), core::CoreError);
+    CHECK(fs::is_directory(directory));
+    for (auto const& entry : fs::directory_iterator(dir.path()))
+        CHECK(entry.path().extension() != ".tmp");
 }
 
 TEST_CASE("opened torrents can be verified against a folder", "[service][verify]")
