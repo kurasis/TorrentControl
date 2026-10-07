@@ -40,6 +40,7 @@
     {
       "name": "windows-asan",
       "displayName": "Windows MSVC ASan with prebuilt release dependencies",
+      "inherits": "windows-base",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
@@ -49,6 +50,8 @@
         "CMAKE_CXX_COMPILER": "cl",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_PREFIX_PATH": "$env{TC_DEPS_PREFIX}",
+        "VCPKG_INSTALLED_DIR": "$env{TC_DEPS_PREFIX}/..",
+        "VCPKG_MANIFEST_INSTALL": "OFF",
         "TC_WARNINGS_AS_ERRORS": "ON",
         "TC_ENABLE_SANITIZERS": "ON",
         "TC_BUILD_APP": "OFF"

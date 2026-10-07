@@ -30,7 +30,10 @@ results are established separately by CI, not by this Linux report.
 
 `windows-asan` builds native project core/service/bridge code, developer tools
 and tests using pinned MSVC 14.44 with `/fsanitize=address`, RelWithDebInfo and
-`/INCREMENTAL:NO`. It reuses release dependencies through `TC_DEPS_PREFIX`.
+`/INCREMENTAL:NO`. It reuses release dependencies through `TC_DEPS_PREFIX` and
+the pinned vcpkg toolchain's package wrappers, with manifest installation
+disabled. This preserves static-library discovery (including zlib's `zs.lib`)
+without rebuilding or instrumenting dependencies.
 The prebuilt dependencies and WebView2 host are **not instrumented**. Windows
 UBSan and leak checking are not claimed. Regular Windows GUI, DPAPI, dialog,
 SMB and process-memory tests continue using the ordinary release build.
