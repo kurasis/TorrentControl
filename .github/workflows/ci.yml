@@ -118,6 +118,18 @@ jobs:
             build/windows-package-evidence/*.log
           if-no-files-found: warn
 
+      - name: Export x64 inputs for Windows 11 compatibility tests
+        shell: pwsh
+        run: ./tests/windows/export-compatibility-inputs.ps1
+
+      - name: Upload x64 compatibility test inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-compatibility-inputs
+          retention-days: 7
+          path: build/windows-compatibility-inputs/
+          if-no-files-found: error
+
       - name: Install process-tree benchmark driver
         run: python -m pip install -r tests/performance/requirements.txt
 
@@ -242,6 +254,51 @@ jobs:
             build/windows-x64-release/src/app/windows/frontend/
             build/windows-x64-release/tools/tc-proof/tc-proof.exe
           if-no-files-found: error
+
+  windows11:
+    name: Windows 11 ARM64 (x64 app compatibility)
+    runs-on: windows-11-arm
+    needs: windows
+    timeout-minutes: 45
+    steps:
+      - name: Windows 11 image identity
+        shell: pwsh
+        run: Get-ComputerInfo | Select-Object WindowsProductName, OsArchitecture
+
+      - uses: actions/checkout@v4
+
+      - name: Download products from this workflow
+        uses: actions/download-artifact@v4
+        with:
+          name: TorrentControl-development-packages-windows-x64
+          path: build/windows11-input
+
+      - name: Download x64 test executables and prerequisite controls
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-x64-compatibility-inputs
+          path: build/windows11-test-input
+
+      - name: Windows 11 actual unit, integration, install and WebView2 tests
+        shell: pwsh
+        run: ./tests/windows/run-windows11.ps1
+
+      - name: Upload Windows 11 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows11-arm64-x64-compatibility-evidence
+          retention-days: 7
+          path: |
+            build/windows11-evidence/summary.json
+            build/windows11-evidence/*.xml
+            build/windows11-evidence/*.log
+            build/windows11-evidence/packaging/*.json
+            build/windows11-evidence/packaging/*.log
+            build/windows11-evidence/native/*.json
+            build/windows11-evidence/native/*.log
+            build/windows11-evidence/native/data-*/output/
+          if-no-files-found: warn
 
   linux:
     name: Linux x64 (headless core, GCC)

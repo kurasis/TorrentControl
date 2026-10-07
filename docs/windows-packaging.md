@@ -20,7 +20,11 @@ packages**; they do not close release acceptance or select the application licen
 
 The application installs under `%LOCALAPPDATA%\Programs\TorrentControl`, with
 current-user Start menu shortcuts and an HKCU uninstall entry. Setup requires
-x64 Windows with build 19045 or newer. This is a packaging eligibility check,
+x64 Windows with build 19045 or newer. The online installer additionally allows
+Windows 11 ARM64's x64 emulation (`x64compatible`); its bootstrapper selects the
+OS Runtime architecture. The offline installer remains restricted to native
+x64 operating systems (`x64os`), because it embeds the x64 standalone Runtime.
+Its refusal on ARM64 is tested. This is a packaging eligibility check,
 not an OS certification. No file association is claimed or overwritten.
 
 MSVC release redistributable DLLs are copied from the pinned toolchain's x64
@@ -100,6 +104,33 @@ CI uploads products, checksums, manifest and proof logs/summary as
 `TorrentControl-development-packages-windows-x64`, with seven-day retention.
 This proof uses Windows Server 2022 with an existing Runtime and installed
 build tools. It does **not** establish a cold, disconnected desktop installation.
+
+## Windows 11 ARM64 CI
+
+The additional CI job runs on GitHub's `windows-11-arm` desktop image. It prints
+`Get-ComputerInfo | Select-Object WindowsProductName, OsArchitecture`, then
+requires a Windows 11 workstation caption, build >= 22000 and actual ARM64 OS
+architecture. It tests the x64 application under Windows 11 emulation; this is
+not a native ARM64 build or native x64 Windows 11 hardware certification.
+
+The job consumes this workflow's products and separately exported developer
+test executables. Package and test-input manifests must match the exact checkout
+commit, and all input hashes are verified before execution. Developer tools,
+unit binaries and negative fixture installers remain separate from products.
+
+Windows 11 runs all Catch2 unit cases, headless creation/reference verification,
+network integration, actual installed-app launch with observed app-local CRT,
+online reinstall/repair, user-data-preserving uninstall, live-app guards, actual
+Microsoft online prerequisite repair and all three prerequisite refusal fixtures.
+It also verifies ARM64 refusal by the x64-only offline installer. Real WebView2
+dialog/job/editor flow, independent output hashes, renderer recovery, settings
+restart and missing/below-policy Runtime controls run against the extracted app.
+Reports are uploaded as `windows11-arm64-x64-compatibility-evidence`.
+
+The existing x64 job retains ASan, long-session, process-tree memory and SMB/TAP
+tests. Those additional checks do not become ARM64 certifications. The hosted
+Windows 11 image already contains tools and a Runtime; fully disconnected,
+missing-Runtime installation and a native ARM64 offline package remain open.
 
 ## Remaining release gates
 
