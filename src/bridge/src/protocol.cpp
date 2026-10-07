@@ -3,6 +3,7 @@
 #include "tc/core/error.hpp"
 #include "tc/core/torrent_engine.hpp"
 #include "tc/service/jobs.hpp"
+#include "tc/service/json_input.hpp"
 
 #include <algorithm>
 #include <ostream>
@@ -84,10 +85,14 @@ std::string reject_request(std::string_view message, std::string code, std::stri
 {
     json id = nullptr;
     if (message.size() <= max_message_bytes) {
-        auto request = json::parse(message, nullptr, false);
-        if (request.is_object()) {
-            auto it = request.find("requestId");
-            if (it != request.end() && it->is_string() && valid_request_id(it->get<std::string>())) id = *it;
+        try {
+            auto request = service::parse_json_input(message);
+            if (request.is_object()) {
+                auto it = request.find("requestId");
+                if (it != request.end() && it->is_string() && valid_request_id(it->get<std::string>())) id = *it;
+            }
+        } catch (core::CoreError const&) {
+            // A queue refusal must not parse an over-deep request for its ID.
         }
     }
     return serialize(error_response(std::move(id), std::move(code), std::move(reason), retryable));
@@ -140,7 +145,12 @@ std::string Dispatcher::handle(std::string_view message, std::string_view source
     if (message.size() > max_message_bytes)
         return serialize(error_response(nullptr, "MESSAGE_TOO_LARGE", "Message exceeds the 1 MiB limit"));
 
-    json const request = json::parse(message, nullptr, /*allow_exceptions=*/false);
+    json request;
+    try {
+        request = service::parse_json_input(message);
+    } catch (core::CoreError const&) {
+        return serialize(error_response(nullptr, "MESSAGE_TOO_DEEP", "JSON nesting exceeds 512 containers"));
+    }
     if (request.is_discarded() || !request.is_object())
         return serialize(error_response(nullptr, "INVALID_MESSAGE", "Message is not a JSON object"));
 

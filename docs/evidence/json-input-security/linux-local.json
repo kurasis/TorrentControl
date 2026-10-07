@@ -1,0 +1,56 @@
+{
+  "recordedAtUtc": "2026-10-07T06:40:24.360178+00:00",
+  "platform": "Linux cloud workspace",
+  "scope": "Deterministic native tests, ASan/UBSan runtime controls and isolated stock-client bind mounts; no fuzz campaigns",
+  "baseCommit": "8e9c9bb19a9b782f6f23223f3f53cd564df992bf",
+  "compiler": "Debian clang version 19.1.7 (3+b1)",
+  "releaseCTest": {
+    "total": 174,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "sanitizerCTest": {
+    "total": 175,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "asanRuntimeControls": {
+    "scope": "ASan runtime negative controls, not application failures",
+    "passed": true,
+    "controls": [
+      {
+        "mode": "heap-overflow",
+        "exitCode": 86,
+        "requiredDiagnostic": "heap-buffer-overflow",
+        "passed": true
+      },
+      {
+        "mode": "use-after-free",
+        "exitCode": 86,
+        "requiredDiagnostic": "heap-use-after-free",
+        "passed": true
+      }
+    ]
+  },
+  "fuzzCampaignsRun": false,
+  "stockClients": {
+    "repositoryMounted": false,
+    "adapterMounts": [
+      "/adapters/BiglyStock.java",
+      "/adapters/qbittorrent_stock.py"
+    ],
+    "regressionChecksPassed": true,
+    "containerRemoved": true,
+    "releaseGate": "open",
+    "fullyVerifiedCases": 11,
+    "imports": 12,
+    "rechecks": 48
+  },
+  "limitations": [
+    "Dependencies and Windows/WebView2 host are not instrumented",
+    "Local evidence does not establish Windows results",
+    "BiglyBT leading-empty pure-v2 compatibility gate remains open"
+  ]
+}

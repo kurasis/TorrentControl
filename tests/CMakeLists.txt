@@ -14,6 +14,7 @@ add_executable(tc_unit_tests
     unit/engine_tests.cpp
     unit/field_registry_tests.cpp
     unit/job_paging_tests.cpp
+    unit/json_input_tests.cpp
     unit/manifest_policy_tests.cpp
     unit/manifest_tests.cpp
     unit/metainfo_tests.cpp
@@ -35,6 +36,15 @@ endif()
 # Catch2 exits with 4 when a test case is skipped (for example a POSIX-only
 # permission test running as root); report that as skipped, not failed.
 catch_discover_tests(tc_unit_tests PROPERTIES SKIP_RETURN_CODE 4 TIMEOUT 120)
+
+if(TC_ENABLE_SANITIZERS)
+    add_executable(tc-sanitizer-runtime-probe sanitizers/runtime_probe.cpp)
+    add_test(NAME sanitizer_runtime_controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/sanitizers/check_runtime.py
+            --probe $<TARGET_FILE:tc-sanitizer-runtime-probe>
+            --report ${CMAKE_CURRENT_BINARY_DIR}/sanitizer-runtime/evidence.json)
+    set_tests_properties(sanitizer_runtime_controls PROPERTIES TIMEOUT 90)
+endif()
 
 # Headless integration proof (specification section 3.1): drives tc-proof and
 # checks every output with the independent Python reference verifier.

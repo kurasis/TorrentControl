@@ -11,6 +11,7 @@ add_library(tc_service
     src/network_probe.cpp
     src/draft.cpp
     src/jobs.cpp
+    src/json_input.cpp
     src/profiles.cpp
     src/sources.cpp
     src/storage.cpp
