@@ -71,6 +71,7 @@ prints `{"status": "failed", "code": ...}` and exits with 2.
 ## Documentation
 
 - [Building and testing](docs/building.md)
+- [Windows development installers and offline Runtime](docs/windows-packaging.md)
 - [Architecture](docs/architecture.md)
 - [Engine notes and known limitations](docs/engine-notes.md)
 - [Acceptance evidence](docs/acceptance.md)

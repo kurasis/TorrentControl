@@ -3,7 +3,7 @@
 TorrentControl uses the following components. Versions are fixed by the vcpkg
 baseline in `vcpkg.json`. Full license texts are installed by vcpkg under
 `vcpkg_installed/<triplet>/share/<port>/copyright` and will be bundled with
-release packages (milestone M4). This file is a summary, not a substitute for
+development packages under `licenses`. This file is a summary, not a substitute for
 those texts.
 
 | Component | Version | License | Used in |
@@ -21,5 +21,13 @@ those texts.
 | Catch2 | 3.16.0 | BSL-1.0 | tests only, not distributed |
 | anacrolix/torrent | 1.61.0 | MPL-2.0 (with third-party dependencies recorded in go.mod/go.sum) | independent development audit only, not distributed |
 
-The Microsoft Edge WebView2 Runtime is not redistributed by development
-builds; it is installed separately (Evergreen).
+Windows development installers bundle Microsoft's official Evergreen bootstrapper
+or x64 standalone installer. Their Microsoft distribution/license terms apply:
+https://developer.microsoft.com/microsoft-edge/webview2/
+https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution
+
+App-local Microsoft Visual C++ release CRT DLLs are copied from the MSVC 14.44
+toolchain's redistributable directory. Microsoft Visual Studio redistribution
+terms apply; this project's licenses do not relicense Microsoft's binaries.
+See https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files.
+Application license selection and final release licensing review remain open.

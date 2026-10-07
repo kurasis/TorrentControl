@@ -247,4 +247,11 @@ AppService-сценарии в headless и настоящем Windows/WebView2, 
 [пакет дополнительных входов](security-input-harnesses.md) добавляет production
 JSON/bridge и URL harnesses и возобновляет кампании с `--runs=1` — третью
 первоначального бюджета 3. Ручной workflow может отключить кампании. Далее —
-другие security-подсистемы, ручная доступность/DPI и распространение M4.
+другие security-подсистемы и ручная доступность/DPI. Первый
+[пакет распространения M4](windows-packaging.md) добавляет unsigned online/offline
+установщики с официальными WebView2 prerequisites, app-local MSVC CRT и
+application-only ZIP. CI проверяет реальную установку, восстановление файлов,
+блокировку установки/удаления при открытом приложении, prerequisite-отказы и
+сохранение пользовательских данных при удалении. Чистые desktop Windows 10/11,
+отключённая сеть при отсутствующем Runtime, лицензия приложения, полный SBOM,
+подпись publisher и release acceptance остаются открытыми.

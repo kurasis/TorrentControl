@@ -12,6 +12,7 @@
 #include "host_services.hpp"
 #include "self_test.hpp"
 #include "webview_host.hpp"
+#include "../install_identity.hpp"
 #include "../runtime_policy.hpp"
 #include "../../../tools/tc-proof/workflow_fixture.hpp"
 #include "../../../tools/tc-proof/workflow_probe.hpp"
@@ -24,6 +25,7 @@
 
 #include <shellapi.h>
 #include <shlobj.h>
+#include <wil/resource.h>
 
 #include <atomic>
 #include <algorithm>
@@ -296,6 +298,10 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
 {
+    // Holding a handle (without owning the mutex) lets all app instances run,
+    // while Setup/Uninstall can refuse to replace files during a live job.
+    wil::unique_handle install_guard(CreateMutexW(nullptr, FALSE, tc::app::install_mutex));
+    if (!install_guard) return 1;
     AppState app;
     bool native_flow = false;
     bool settings_test = false;
