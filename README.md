@@ -17,6 +17,28 @@ Microsoft Edge WebView2.
 > [Stock client imports](docs/stock-client-imports.md) exercise qBittorrent and
 > BiglyBT; BiglyBT's leading-empty pure-v2 folder gate remains open.
 
+## Security and privacy
+
+Open `.tcproject` files only from trusted sources: opening a project starts
+scanning its restored source paths, including network shares. Inspect unfamiliar
+projects as text before opening them in the app.
+
+Projects and generated torrents can contain operational tracker credentials.
+Review them before sharing; URL masking uses heuristics and does not recognize
+every secret format. Recognized tracker secrets in local Windows settings use
+current-user DPAPI.
+
+[Microsoft's WebView2 privacy documentation](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/data-privacy)
+describes required and optional diagnostic collection. Windows' **Diagnostics &
+feedback** settings control optional collection; WebView2 also collects required
+data regardless of that setting. The Runtime's update/diagnostic traffic needs
+separate consideration from application network diagnostics.
+
+Development packages are unsigned. Obtain them from this repository's releases
+or CI; adjacent checksums verify file integrity but do not establish a publisher's
+identity. See the [security audit](docs/security-audit-2026-10-07.md) for the
+verified safeguards and remaining limitations.
+
 ## Repository layout
 
 | Path | Contents |
