@@ -156,9 +156,28 @@ stated attacker access or user action; absence of a reproduction is explicit.
 | R04 / P1 before stable release | `build.ps1` manifest `unsigned=true`; release artifacts/checksum publication | Replacing both an unsigned installer and its adjacent checksum defeats that checksum as an authenticity check. A compromised publishing account or distribution mirror can supply executable code. No compromised release was observed. | Authenticode-sign app and installers with a protected publisher key and timestamp; establish independent release provenance/attestations. Requires the owner's signing identity/key infrastructure. |
 | R05 / P2 | `runtime_policy.hpp` compatibility floor; `main.cpp` Runtime selection; prerequisite manifest | The SDK version and compatibility floor do not identify the actual browser engine or guarantee its security patch level. Offline/external Fixed Runtime deployments can stay vulnerable after new browser fixes. Current Microsoft notes also mention pending Chromium fixes. | Record installed/bundled Runtime versions in evidence, define a patch/update policy and review Microsoft's security releases. Do not claim that an Evergreen minimum is a security baseline. |
 | R06 / P2 | `network_probe.cpp::probe_endpoint`, `parse_probe_url`; `app_operations.cpp::startDiagnostics` | Explicit endpoint diagnostics can contact LAN/loopback addresses or a malicious host that resolves privately, with a GET/UDP-connect and optional URL credentials. Same-origin redirect policy is not DNS-rebinding protection. There is no remotely exposed local API; the UI warns that checks contact endpoints. | Preview destination/protocol and resolved scope; require separate consent for private addresses where appropriate. Keep legitimate LAN diagnostics usable. Test rebinding and credential forwarding in a network-isolated lab. |
-| R07 / P2 | `.github/workflows/ci.yml`, Actions refs such as `@v4` / `@v1`; Go/Python/browser developer dependencies | Mutable action tags and build tools can execute on runners; compromised upstream tags can alter produced binaries. vcpkg/source checksums do not protect unrelated Actions. No suspicious production install script was found. The full transitive developer graph has not received a reachability audit. | Pin Actions to reviewed commit SHAs, keep token permissions minimal, produce an SBOM and scan the resolved production and developer graphs separately. |
+| R07 / P2, partially corrected 2026-10-08 | `.github/workflows/ci.yml`; Go/Python/browser developer dependencies | All 31 Action uses now pin full commit SHAs, preserving the exact nine actions used by successful `main` CI run `37674540550`. Mutable-tag substitution is addressed. Build tools can still download/run dependencies; the full transitive developer graph has not received a reachability audit. No suspicious production install script was found. | Review future pin changes, keep token permissions minimal, produce an SBOM and scan resolved production and developer graphs separately. |
 | R08 / P2 | `webview_host.cpp` default environment options / user-data profile; `frontend/index.html` CSP | App-specific analytics or browser-profile scraping were not found. Microsoft's official privacy documentation says WebView2 collects required and optional diagnostics; the Windows Diagnostics & feedback setting governs collection, rather than an app-specific consent dialog. Traffic/content was not captured here. `frame-ancestors` in a meta CSP is not enforced as an HTTP header would be. | Explain vendor traffic and Windows privacy controls in the product; verify crash/diagnostic/update traffic in an isolated Windows VM. Keep native origin/navigation checks; use a header-enforced embedding policy if embedding becomes possible. |
 | R09 / P3 | `cmake/CompilerWarnings.cmake`; prior Windows PE inspection | Existing x64 app artifact has DEP, ASLR and high-entropy ASLR; Control Flow Guard flag is absent. This is defense-in-depth, not a demonstrated exploit. | Evaluate `/guard:cf` and `/sdl` with the pinned native dependency/toolchain combination before adopting them. |
+
+### Follow-up — 2026-10-08
+
+Actions are pinned to the repository commits actually downloaded in successful
+CI run `37674540550`, verified against the corresponding upstream Git commit
+objects. This changes Action reference resolution, not their code, inputs,
+runner selection, token permissions or the `runs=1` fuzz budget. Each SHA retains
+its former major tag in a comment. To update a pin, review the upstream diff and
+advisories, resolve the new release to a full commit SHA, preserve any action
+subdirectory (for example `cache/restore`), and run the full PR CI before merging.
+A full-SHA pin prevents a moved tag from silently replacing the selected commit;
+it does not establish that every dependency subsequently downloaded by that action
+is trustworthy or immutable.
+
+The README now explains project-source trust, sharing of operational credentials,
+unsigned-package limitations and Microsoft's required/optional WebView2 diagnostic
+collection, linked to the official privacy documentation. This partially addresses
+R08 documentation; product privacy controls and isolated vendor-traffic capture
+remain outstanding. Source import behavior and Runtime/update policy are unchanged.
 
 ## Checks that already constrain the attack surface
 
