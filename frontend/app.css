@@ -14,6 +14,7 @@
   --ok: #15803d;
   --warning: #a16207;
   --error: #b91c1c;
+  --error-background: #b91c1c;
   --focus: #2563eb;
   --selected: #dbe7ff;
 }
@@ -149,7 +150,7 @@ select { width: auto; max-width: 100%; }
 .segmented button[aria-checked="true"] { background: var(--accent); color: var(--accent-text); }
 
 .banner { padding: 10px 16px; }
-.banner.error { background: var(--error); color: #fff; }
+.banner.error { background: var(--error-background); color: #fff; }
 
 /* ---- Layout ------------------------------------------------------------------ */
 
@@ -316,6 +317,7 @@ progress { width: 100%; height: 6px; accent-color: var(--accent); }
 /* ---- Dialog and toast -------------------------------------------------------------------- */
 
 dialog {
+  overscroll-behavior: contain;
   width: min(520px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
   padding: 16px 20px;
@@ -327,7 +329,22 @@ dialog {
 
 dialog.wide { width: min(860px, calc(100vw - 32px)); }
 dialog::backdrop { background: rgb(0 0 0 / 0.4); }
-.dialog-body { overflow: auto; max-height: calc(100vh - 160px); }
+.dialog-body { overflow: auto; max-height: calc(100vh - 160px); overscroll-behavior: contain; }
+#profile-changes { table-layout: fixed; width: 100%; }
+#profile-changes th, #profile-changes td { overflow-wrap: anywhere; }
+#profile-changes td[aria-hidden] { width: 24px; }
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  transform: translateY(calc(-100% - 16px));
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.skip-link:focus-visible { transform: translateY(0); }
 .confirm-inline { padding: 8px 12px; margin: 8px 0; border: 1px solid var(--accent); border-radius: 6px; }
 
 .toast {
@@ -346,7 +363,7 @@ dialog::backdrop { background: rgb(0 0 0 / 0.4); }
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
 }
 
-.toast.error { background: var(--error); color: #fff; }
+.toast.error { background: var(--error-background); color: #fff; }
 .toast button.link { color: inherit; text-decoration: underline; }
 
 @media (prefers-reduced-motion: no-preference) {

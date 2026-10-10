@@ -54,15 +54,15 @@ function button(label, onclick, attrs = {}) {
 
 // ---- Confirmation ---------------------------------------------------------------
 
-export function showConfirm(title, message = "") {
+export function showConfirm(title, message = "", { confirmLabel = t("apply"), cancelLabel = t("close"), safeDefault = false } = {}) {
   return new Promise((resolve) => {
     let answer = false;
     open(title, message ? h("p", {}, message) : null, [
-      button(t("close"), () => closeDialog(), { id: "confirm-no" }),
-      button(t("apply"), () => {
+      button(cancelLabel, () => closeDialog(), { id: "confirm-no", autofocus: safeDefault }),
+      button(confirmLabel, () => {
         answer = true;
         closeDialog();
-      }, { id: "confirm-yes", class: "primary", autofocus: true }),
+      }, { id: "confirm-yes", class: "primary", autofocus: !safeDefault }),
     ], { closed: () => resolve(answer) });
   });
 }
@@ -333,7 +333,7 @@ export function showBatch(actions) {
           h("input", { type: "checkbox", id: `batch-include-${item.id}`, checked: item.included,
             "aria-label": `${t("batchInclude")}: ${item.name}`, onchange: (e) => override(item.id, { included: e.target.checked }) }),
           h("span", { class: "path" }, item.name), h("span", { class: "path", title: item.output }, item.output),
-          policySelect(`batch-policy-${item.id}`, item.policy, (value) => override(item.id, { policy: value })),
+          policySelect(`batch-policy-${item.id}`, item.policy, (value) => override(item.id, { policy: value }), t("batchItemPolicy", { name: item.name })),
           batchRoots(item, plan, actions)), { id: "batch-items" }) :
       h("table", { class: "grid compact", id: "batch-items" },
         h("thead", {}, h("tr", {},
@@ -355,7 +355,7 @@ export function showBatch(actions) {
             batchRoots(item, plan, actions),
             item.existsOnDisk ? h("span", { class: "tag" }, t("batchExists")) : null,
             item.duplicateInBatch ? h("span", { class: "tag" }, t("batchDuplicate")) : null),
-          h("td", {}, policySelect(`batch-policy-${item.id}`, item.policy, (v) => override(item.id, { policy: v }))))))),
+          h("td", {}, policySelect(`batch-policy-${item.id}`, item.policy, (v) => override(item.id, { policy: v }), t("batchItemPolicy", { name: item.name }))))))),
       plan.notesTotal > 0 ? collectionPane(t("batchHeading"),
         (offset, limit) => actions.modelPage("batch", "notes", "", plan.revision, offset, limit),
         (note, index) => {
@@ -409,8 +409,8 @@ function batchRoots(item, plan, actions) {
   return root;
 }
 
-function policySelect(id, value, onchange) {
-  const el = h("select", { id, onchange: (e) => onchange(e.target.value) },
+function policySelect(id, value, onchange, label) {
+  const el = h("select", { id, "aria-label": label, onchange: (e) => onchange(e.target.value) },
     h("option", { value: "rename" }, t("policyRename")),
     h("option", { value: "skip" }, t("policySkip")),
     h("option", { value: "replace" }, t("policyReplace")));

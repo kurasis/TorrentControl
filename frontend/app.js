@@ -83,8 +83,13 @@ function flush() {
 function preserveFocus(container, render) {
   const active = document.activeElement;
   const id = active && container.contains(active) ? active.id : null;
-  const typing = id && "value" in active && state.pendingFields.has(active.dataset.field);
-  const value = typing ? active.value : undefined;
+  // Pending text must survive background updates even when focus is in a
+  // confirmation dialog or the toolbar rather than in the field itself.
+  const pendingValues = new Map();
+  for (const input of container.querySelectorAll("[data-field]")) {
+    if (input.id && "value" in input && state.pendingFields.has(input.dataset.field))
+      pendingValues.set(input.id, input.type === "checkbox" ? { checked: input.checked } : { value: input.value });
+  }
   let start = null;
   let end = null;
   try {
@@ -96,10 +101,13 @@ function preserveFocus(container, render) {
   const scroll = container.scrollTop;
   render();
   container.scrollTop = scroll;
+  for (const [fieldId, values] of pendingValues) {
+    const input = document.getElementById(fieldId);
+    if (input && container.contains(input)) Object.assign(input, values);
+  }
   if (!id) return;
   const el = document.getElementById(id);
   if (!el) return;
-  if (value !== undefined) el.value = value;
   el.focus({ preventScroll: true });
   if (start !== null) {
     try {
@@ -197,6 +205,16 @@ async function sendPatch() {
 
 const sendPatchSoon = debounce(sendPatch, 350);
 
+function hasUnsavedEditor() {
+  return !!(state.editor?.dirty || state.editor?.changes.length || state.editor?.removeSignatures || state.editorPreview);
+}
+
+async function confirmEditorReplacement() {
+  return !hasUnsavedEditor() || showConfirm(t("discardEditorTitle"), t("discardEditorMessage"), {
+    confirmLabel: t("discardChanges"), cancelLabel: t("keepEditing"), safeDefault: true,
+  });
+}
+
 export const actions = {
   renderEditor: () => invalidate("workspace"),
   renderDiagnostics() { state.diagnosticVersion++; invalidate("workspace"); },
@@ -283,6 +301,10 @@ export const actions = {
     if (r?.draft) applyDraft(r.draft);
   },
   async newDraft() {
+    if (!await showConfirm(t("resetDraftTitle"), t("resetDraftMessage"), {
+      confirmLabel: t("resetDraft"), cancelLabel: t("keepEditing"), safeDefault: true,
+    })) return;
+    await sendPatch();
     const r = await guarded(request("newDraft"));
     if (r?.draft) {
       state.torrent = null;
@@ -320,6 +342,10 @@ export const actions = {
     });
   },
   async deleteProfile(profileId) {
+    const profile = state.profiles.find((item) => item.id === profileId);
+    if (!await showConfirm(t("deleteProfileTitle"), t("deleteProfileMessage", { name: profile?.name ?? profileId }), {
+      confirmLabel: t("deleteProfile"), cancelLabel: t("close"), safeDefault: true,
+    })) return;
     const r = await guarded(request("deleteProfile", { profileId }));
     if (r) {
       applyProfileList(r);
@@ -405,6 +431,7 @@ export const actions = {
   },
   saveMagnet: (id) => guarded(request("saveMagnet", { id })),
   async openTorrent() {
+    if (!await confirmEditorReplacement()) return;
     const r = await guarded(request("openTorrent"));
     if (r?.torrent) {
       state.torrent = r.torrent;
@@ -417,6 +444,7 @@ export const actions = {
     }
   },
   async openJobResult(jobId) {
+    if (!await confirmEditorReplacement()) return;
     const r = await guarded(request("openJobResult", { jobId }));
     if (r?.torrent) {
       state.torrent = r.torrent;
@@ -775,6 +803,10 @@ async function readSnapshot() {
 }
 
 function wireChrome() {
+  $("skip-to-workspace").addEventListener("click", (event) => {
+    event.preventDefault();
+    $("workspace").focus();
+  });
   for (const b of document.querySelectorAll("#mode-switch [data-mode]")) {
     b.addEventListener("click", () => actions.updateSettings({ mode: b.dataset.mode }));
   }

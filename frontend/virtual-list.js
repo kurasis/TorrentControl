@@ -25,6 +25,7 @@ export class VirtualList {
     container.tabIndex = 0;
     this.spacer = document.createElement("div");
     this.spacer.className = "vlist-spacer";
+    this.spacer.setAttribute("aria-hidden", "true");
     container.append(this.spacer);
     this.rows = new Map();
     container.addEventListener("scroll", () => this.render(), { passive: true });
@@ -93,8 +94,13 @@ export class VirtualList {
         this.rows.delete(index);
       }
     }
+    let previous = this.spacer;
     for (let i = first; i < last; i++) {
-      if (this.rows.has(i)) continue;
+      if (this.rows.has(i)) {
+        previous = this.rows.get(i);
+        previous.setAttribute("aria-setsize", String(this.total));
+        continue;
+      }
       const item = this.item(i);
       let row;
       if (item === undefined) {
@@ -106,10 +112,13 @@ export class VirtualList {
       }
       row.classList.add("vlist-row");
       row.setAttribute("role", "listitem");
+      row.setAttribute("aria-posinset", String(i + 1));
+      row.setAttribute("aria-setsize", String(this.total));
       row.style.top = `${i * this.rowHeight}px`;
       row.style.height = `${this.rowHeight}px`;
       row.dataset.index = String(i);
-      this.container.append(row);
+      previous.after(row);
+      previous = row;
       this.rows.set(i, row);
     }
   }

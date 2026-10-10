@@ -1,7 +1,7 @@
 // --self-test-flow only: real Windows common item dialogs, native jobs and a
 // deliberate renderer crash. The native host owns all fixture paths.
 import { request } from "./bridge.js";
-import { runSelfTest } from "./self-test.js";
+import { confirmSelfTestAction, runSelfTest } from "./self-test.js";
 
 function check(condition, message) {
   if (!condition) throw new Error(message);
@@ -85,7 +85,15 @@ export async function runNativeFlow(actions, state, info) {
     evidence.nativeResponsiveness = true;
     await actions.reloadSnapshot();
   }
-  await actions.newDraft();
+  actions.edit("name", "Unsaved native draft");
+  await until(() => state.draft.name === "Unsaved native draft" && !state.pendingFields.size, "typed draft acknowledgement");
+  const cancelledReset = actions.newDraft();
+  await until(() => document.getElementById("confirm-no"), "draft reset confirmation");
+  document.getElementById("confirm-no").click();
+  await cancelledReset;
+  check((await request("getSnapshot")).draft.name === "Unsaved native draft", "Cancelling reset cleared the draft");
+  evidence.draftResetConfirmation = true;
+  await confirmSelfTestAction(() => actions.newDraft());
   const revision = state.draft.revision;
   await request("selfTestStep", { name: "cancel" });
   check((await request("selectSources", { kind: "files" })).cancelled, "Dialog cancel did not reach the bridge");
@@ -95,7 +103,7 @@ export async function runNativeFlow(actions, state, info) {
   check(state.draft.sources[0]?.name === "данные #1.bin", "The frontend did not apply the selected file");
   let snapshot = await request("getSnapshot");
   check(snapshot.draft.sources.length === 1 && snapshot.draft.sources[0].name === "данные #1.bin", "Unicode file selection failed");
-  await actions.newDraft();
+  await confirmSelfTestAction(() => actions.newDraft());
   await request("selfTestStep", { name: "folder" });
   await actions.selectSources("folder");
   check(state.draft.sources[0]?.name === "набор данных", "The frontend did not apply the selected folder");
@@ -132,7 +140,7 @@ export async function runNativeFlow(actions, state, info) {
     created.push(finished);
   }
   await dialog("project", "saveProject");
-  await actions.newDraft();
+  await confirmSelfTestAction(() => actions.newDraft());
   const project = await dialog("project", "openProject");
   check(project.draft.pieceLength === created[2].result.pieceLength, "Project lost resolved piece size");
   await scan();

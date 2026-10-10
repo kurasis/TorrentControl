@@ -10,6 +10,7 @@
   <script type="module" src="app.js"></script>
 </head>
 <body>
+  <a id="skip-to-workspace" class="skip-link" href="#workspace" data-i18n="skipToWorkspace">Skip to workspace</a>
   <header class="titlebar">
     <h1 data-i18n="appTitle">TorrentControl</h1>
     <span class="badge" data-i18n="devBuild">Development build</span>
@@ -43,7 +44,7 @@
   <div id="settings-persistence" class="banner error" role="status" hidden data-i18n="settingsPersistence"></div>
 
   <div class="layout">
-    <main id="workspace" aria-live="off"></main>
+    <main id="workspace" tabindex="-1" aria-live="off"></main>
     <aside id="review" aria-labelledby="review-heading"></aside>
   </div>
 
