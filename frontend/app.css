@@ -331,7 +331,9 @@ dialog.wide { width: min(860px, calc(100vw - 32px)); }
 dialog::backdrop { background: rgb(0 0 0 / 0.4); }
 .dialog-body { overflow: auto; max-height: calc(100vh - 160px); overscroll-behavior: contain; }
 #profile-changes { table-layout: fixed; width: 100%; }
-#profile-changes th, #profile-changes td { overflow-wrap: anywhere; }
+#profile-changes th, #profile-changes td { overflow-wrap: anywhere; vertical-align: top; }
+#profile-changes th { width: 28%; }
+#profile-changes td:nth-child(2), #profile-changes td:nth-child(4) { width: 21%; }
 #profile-changes td[aria-hidden] { width: 24px; }
 .skip-link {
   position: fixed;
