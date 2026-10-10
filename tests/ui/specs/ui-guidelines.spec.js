@@ -205,19 +205,34 @@ test("batch row policies identify the task and modal scroll is contained", async
 
 });
 
-test("profile previews wrap long values without horizontal overflow", async ({ page }) => {
+test("profile previews keep long values and translated labels readable", async ({ page }) => {
   await page.goto("/index.html");
-  await page.evaluate(async () => {
-    const { showProfileChange } = await import("/dialogs.js");
-    showProfileChange({ profile: { name: "Long values" }, changes: [
-      { field: "comment", before: "x".repeat(1000), after: "y".repeat(1000), removesUserValue: true },
-    ] }, () => {}, () => {}, {});
-  });
-  for (const width of [1200, 600]) {
-    await page.setViewportSize({ width, height: 800 });
-    await expect(page.locator("#profile-changes")).toContainText("x".repeat(1000));
-    const dimensions = await page.locator(".dialog-body").evaluate((el) => ({ client: el.clientWidth, scroll: el.scrollWidth }));
-    expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client + 1);
+  for (const language of ["en", "ru"]) {
+    await page.locator("#language-select").selectOption(language);
+    await expect(page.locator("html")).toHaveAttribute("lang", language);
+    await page.evaluate(async () => {
+      const { showProfileChange } = await import("/dialogs.js");
+      showProfileChange({ profile: { name: "Long values" }, changes: [
+        { field: "comment", before: "x".repeat(1000), after: "y".repeat(1000), removesUserValue: true },
+      ] }, () => {}, () => {}, {});
+    });
+    for (const width of [1200, 600]) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(page.locator("#profile-changes")).toContainText("x".repeat(1000));
+      const dimensions = await page.locator(".dialog-body").evaluate((el) => ({ client: el.clientWidth, scroll: el.scrollWidth }));
+      expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client + 1);
+      const heading = await page.locator("#profile-changes th").evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const label = range.getClientRects();
+        range.selectNodeContents(el.nextElementSibling);
+        return { lines: label.length, top: label[0].top, valueTop: range.getClientRects()[0].top };
+      });
+      expect(heading.lines, `${language} header at ${width}px`).toBe(1);
+      expect(heading.top).toBeLessThanOrEqual(heading.valueTop + 2);
+    }
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#dialog")).not.toBeVisible();
   }
 });
 
