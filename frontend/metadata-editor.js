@@ -91,16 +91,26 @@ export function renderMetadataEditor(state, invalidate, onSaved) {
     catch (err) { e.error = `${err.code ?? t("errorPrefix")}: ${err.message}`; }
     finally { e.busy = false; e.version++; invalidate("workspace"); }
   };
-  const select = (key) => run(async () => {
-    stage(state);
-    const selected = await request("getTorrentField", { torrentId: e.torrentId, scope: e.scope, key });
-    const staged = e.changes.find((c) => c.id === `${e.scope}:${keyId(selected.key)}`);
-    if (staged) selected.value = staged.value;
-    e.selection = selected;
-    e.buffer = bufferFor(selected);
-    e.remove = !!staged && staged.value === null;
-    e.dirty = false;
-  });
+  const select = (key) => {
+    const focusId = document.activeElement?.id;
+    return run(async () => {
+      stage(state);
+      const selected = await request("getTorrentField", { torrentId: e.torrentId, scope: e.scope, key });
+      const staged = e.changes.find((c) => c.id === `${e.scope}:${keyId(selected.key)}`);
+      if (staged) selected.value = staged.value;
+      e.selection = selected;
+      e.buffer = bufferFor(selected);
+      e.remove = !!staged && staged.value === null;
+      e.dirty = false;
+    }).then(() => requestAnimationFrame(() => {
+      // The busy render replaces the initiating control. Restore focus only
+      // while the user is still waiting here, never across another dialog/view.
+      const active = document.activeElement;
+      if (state.editor === e && !e.error && !document.getElementById("dialog").open &&
+          (active === document.body || active?.id === focusId))
+        document.getElementById("editor-value")?.focus();
+    }));
+  };
   const edit = (value) => {
     e.buffer = value;
     e.dirty = true;
@@ -117,7 +127,8 @@ export function renderMetadataEditor(state, invalidate, onSaved) {
     : h(kind === "text" || kind === "int" ? "input" : "textarea", {
       id: "editor-value", value: e.buffer, rows: kind === "typed" ? 10 : 5,
       readonly: !s?.editable, disabled: e.busy,
-      oninput: (event) => edit(event.target.value), spellcheck: false,
+      oninput: (event) => edit(event.target.value), spellcheck: "false",
+      name: "torrent-field-value", autocomplete: "off",
     });
   const preview = state.editorPreview;
   const displayedValue = (value) => value === null ? t("editorAbsent") : JSON.stringify(value, null, 2);
@@ -125,11 +136,11 @@ export function renderMetadataEditor(state, invalidate, onSaved) {
   const scopeControl = h("select", { id: "editor-scope", disabled: e.busy, onchange: (event) => run(async () => {
     stage(state); await loadMetadata(state, invalidate, event.target.value);
   }) }, ["top", "info"].map((scope) => h("option", { value: scope, selected: e.scope === scope }, scope)));
-  const addKnown = h("select", { id: "editor-add-known", disabled: e.busy, onchange: (event) => {
+  const addKnown = h("select", { id: "editor-add-known", "aria-label": t("editorAddField"), disabled: e.busy, onchange: (event) => {
     if (event.target.value) select(taggedText(event.target.value));
   } }, h("option", { value: "" }, t("editorAddField")), e.registry.filter((field) => field.scope === e.scope && field.editable)
     .map((field) => h("option", { value: field.key }, `${field.key} (${field.reference})`)));
-  const extension = h("input", { id: "editor-extension-key", type: "text", placeholder: t("editorKeyHint"), disabled: e.busy });
+  const extension = h("input", { id: "editor-extension-key", type: "text", name: "extension-key", autocomplete: "off", spellcheck: "false", "aria-label": t("editorExtensionKey"), placeholder: t("editorKeyHint"), disabled: e.busy });
   return h("section", { id: "metadata-editor", "aria-label": t("editorTitle"),
     dataset: { torrentId: e.torrentId, scope: e.scope, selectedKey: s ? keyId(s.key) : "" } },
     h("h3", {}, t("editorTitle")), h("p", { class: "note" }, t("editorScopeHint")),
@@ -140,7 +151,7 @@ export function renderMetadataEditor(state, invalidate, onSaved) {
         select(key);
       } }, t("editorExtension"))),
     h("ul", { class: "editor-fields" }, e.rows.map((row) => h("li", {},
-      h("button", { type: "button", disabled: e.busy || row.key.truncated, onclick: () => select(row.key) }, keyText(row.key)),
+      h("button", { type: "button", id: `editor-field-${e.scope}-${keyId(row.key)}`, disabled: e.busy || row.key.truncated, onclick: () => select(row.key) }, keyText(row.key)),
       h("span", { class: "note" }, ` ${row.descriptor?.support ?? t("editorUnknown")} · ${row.descriptor?.type ?? row.value.t} · ${row.descriptor?.reference ?? t("editorNoStandard")}`)))),
     h("div", { class: "button-row" },
       h("button", { type: "button", disabled: e.busy || e.offset === 0, onclick: () => run(async () => {

@@ -1,5 +1,7 @@
 // Formatting helpers. Sizes use binary units (KiB, MiB, ...); exact byte
 // counts stay available as decimal strings for details and tooltips.
+import { locale } from "./i18n.js";
+
 const UNITS = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
 
 // `bytes` may be a decimal string (large values cross the bridge as text).
@@ -10,19 +12,20 @@ export function formatBytes(bytes) {
   } catch {
     return String(bytes);
   }
-  if (n < 1024n) return `${n} B`;
+  if (n < 1024n) return `${new Intl.NumberFormat(locale()).format(n)} B`;
   let unit = 0;
   let value = Number(n);
   while (value >= 1024 && unit < UNITS.length - 1) {
     value /= 1024;
     unit += 1;
   }
-  return `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${UNITS[unit]}`;
+  const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${new Intl.NumberFormat(locale(), { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value)} ${UNITS[unit]}`;
 }
 
 export function exactBytes(bytes) {
   try {
-    return `${BigInt(bytes ?? 0).toLocaleString("en-US").replace(/,/g, " ")} B`;
+    return `${new Intl.NumberFormat(locale()).format(BigInt(bytes ?? 0))} B`;
   } catch {
     return String(bytes);
   }

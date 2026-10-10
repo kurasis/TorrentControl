@@ -54,6 +54,8 @@ function textInput(id, fieldName, value, actions, attrs = {}) {
   return h("input", {
     id,
     type: "text",
+    name: fieldName,
+    autocomplete: "off",
     value: value ?? "",
     dataset: { field: fieldName },
     spellcheck: "false",
@@ -263,6 +265,8 @@ function renderGeneralTab(state, actions) {
   const fixed = Number(d.fixedDate || 0);
   const dateInput = h("input", {
     id: "draft-fixed-date",
+    name: "fixedDate",
+    "aria-label": t("fixedDateLabel"),
     type: "datetime-local",
     step: "1",
     value: new Date(fixed * 1000).toISOString().slice(0, 19),

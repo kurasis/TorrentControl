@@ -11,6 +11,13 @@ async function waitFor(predicate) {
   }
 }
 
+export async function confirmSelfTestAction(action) {
+  const pending = action();
+  await waitFor(() => document.getElementById("confirm-yes"));
+  document.getElementById("confirm-yes").click();
+  await pending;
+}
+
 export async function runSelfTest(actions, state, info) {
   const profiles = state.profiles.length;
   const name = "Self-test профиль";
@@ -24,7 +31,15 @@ export async function runSelfTest(actions, state, info) {
   if (!saved) throw new Error("Profile was not saved through the native bridge");
   const persisted = await request("checkSelfTestProfile", { profileId: saved.id, name });
   if (!persisted.persisted) throw new Error("Saved profile did not survive a settings reload");
-  await actions.deleteProfile(saved.id);
+  const cancelledDeletion = actions.deleteProfile(saved.id);
+  await waitFor(() => document.getElementById("confirm-no"));
+  document.getElementById("confirm-no").click();
+  await cancelledDeletion;
+  if (!(await request("checkSelfTestProfile", { profileId: saved.id, name })).persisted)
+    throw new Error("Cancelling deletion removed the saved profile");
+  await confirmSelfTestAction(() => actions.deleteProfile(saved.id));
+  if ((await request("checkSelfTestProfile", { profileId: saved.id, name })).persisted)
+    throw new Error("Confirmed deletion did not remove the saved profile");
 
   const magnet = "magnet:?xt=urn:btih:0123456789012345678901234567890123456789";
   showMagnetCopy(magnet);
@@ -33,5 +48,5 @@ export async function runSelfTest(actions, state, info) {
     throw new Error("Manual magnet copy is unavailable");
   closeDialog();
   return { engineVersion: info.engineVersion, appVersion: info.appVersion, profiles,
-    profileDialog: true, profilePersisted: true, magnetDialog: true };
+    profileDialog: true, profilePersisted: true, profileDeleteConfirmation: true, magnetDialog: true };
 }
