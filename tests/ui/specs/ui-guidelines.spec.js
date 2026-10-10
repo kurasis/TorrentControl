@@ -47,7 +47,31 @@ test("reset cancellation preserves a freshly typed draft; explicit reset clears 
   await page.locator("#btn-new").click();
   await page.getByRole("button", { name: "Reset draft", exact: true }).click();
   await expect(page.locator("#draft-name")).toHaveValue("");
-  expect(await requests(page, "newDraft")).toHaveLength(1);
+  await expect.poll(async () => (await requests(page, "newDraft")).length).toBe(1);
+});
+
+test.describe("pending draft text during confirmation", () => {
+  test.use({ mockConfig: 'window.__mockConfig = { responseDelay: (m) => m.operation === "updateDraft" ? 1000 : 0 };' });
+  test("a background render keeps typed text while modal focus is elsewhere", async ({ page }) => {
+    await page.goto("/index.html");
+    await expect(page.locator("#issues")).toContainText("Add files or folders");
+    await page.locator("#draft-name").fill("Unacknowledged draft text");
+    await page.locator("#btn-new").click();
+    await expect(page.locator("#confirm-no")).toBeFocused();
+    const value = await page.evaluate(async () => {
+      const { state, invalidate } = await import("/app.js");
+      state.validation.draftRevision = "background-validation";
+      invalidate("workspace");
+      await new Promise(requestAnimationFrame);
+      return document.getElementById("draft-name").value;
+    });
+    expect(value).toBe("Unacknowledged draft text");
+    await expect(page.locator("#confirm-no")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#dialog")).not.toBeVisible();
+    await expect(page.locator("#draft-name")).toHaveValue("Unacknowledged draft text");
+    expect(await requests(page, "newDraft")).toHaveLength(0);
+  });
 });
 
 for (const phase of ["buffer", "staged", "preview"]) {

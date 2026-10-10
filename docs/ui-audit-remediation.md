@@ -14,7 +14,7 @@ accessibility issue; P3 a smaller accessibility or localization issue.
 | --- | --- | --- | --- |
 | P1 | `frontend/app.js`, `openTorrent` | Reopening loses an unsaved buffer, staged edits or preview | Ask before invoking native opening; cancellation retains edits. Also guard `openJobResult`. |
 | P1 | `frontend/app.js`, `deleteProfile` | Saved profiles are deleted immediately | Name the profile in a confirmation, default to cancellation. |
-| P2 | `frontend/app.js`, `newDraft` | Reset clears the draft without a visible warning | Confirm before reset, including unsaved editor changes. Flush typed draft fields before accepted reset. |
+| P2 | `frontend/app.js`, `newDraft` | Reset clears the draft without a visible warning | Confirm before reset, including unsaved editor changes. Flush typed draft fields before accepted reset. Preserve pending input values during background renders even when modal/toolbar focus is elsewhere. |
 | P2 | `frontend/metadata-editor.js`, field selection | Async busy rendering loses keyboard focus | Give field buttons stable IDs, focus the loaded value unless the user moved elsewhere. |
 | P2 | `frontend/metadata-editor.js`, add controls | Known-field selector unnamed; extension key labelled only by placeholder | Add translated accessible names. |
 | P2 | `frontend/metadata-editor.js`, value input | Boolean `false` is skipped by the DOM builder, leaving spellchecking enabled | Use the enumerated HTML attribute `spellcheck="false"`. |
@@ -56,7 +56,7 @@ cmake --build build/linux-release -j 2
 ctest --test-dir build/linux-release --output-on-failure -j 2
 ```
 
-After fixes: all 76 Chromium UI tests (57 existing and 19 new), the Linux
+After fixes: all 77 Chromium UI tests (57 existing and 20 new), the Linux
 build and all 183 CTest tests passed. `git diff --check` passed.
 
 The project has no separate frontend lint or static type-check command.

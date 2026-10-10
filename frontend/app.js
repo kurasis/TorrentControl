@@ -83,8 +83,13 @@ function flush() {
 function preserveFocus(container, render) {
   const active = document.activeElement;
   const id = active && container.contains(active) ? active.id : null;
-  const typing = id && "value" in active && state.pendingFields.has(active.dataset.field);
-  const value = typing ? active.value : undefined;
+  // Pending text must survive background updates even when focus is in a
+  // confirmation dialog or the toolbar rather than in the field itself.
+  const pendingValues = new Map();
+  for (const input of container.querySelectorAll("[data-field]")) {
+    if (input.id && "value" in input && state.pendingFields.has(input.dataset.field))
+      pendingValues.set(input.id, input.type === "checkbox" ? { checked: input.checked } : { value: input.value });
+  }
   let start = null;
   let end = null;
   try {
@@ -96,10 +101,13 @@ function preserveFocus(container, render) {
   const scroll = container.scrollTop;
   render();
   container.scrollTop = scroll;
+  for (const [fieldId, values] of pendingValues) {
+    const input = document.getElementById(fieldId);
+    if (input && container.contains(input)) Object.assign(input, values);
+  }
   if (!id) return;
   const el = document.getElementById(id);
   if (!el) return;
-  if (value !== undefined) el.value = value;
   el.focus({ preventScroll: true });
   if (start !== null) {
     try {
